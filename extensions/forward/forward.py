@@ -182,7 +182,7 @@ class Forwarding(commands.Cog):
 
         # Send the message
         try:
-            await destination.send(content=final_content if final_content else None, embeds=embeds_to_send, files=files_to_send)
+            await destination.send(content=final_content if final_content else None, embeds=embeds_to_send, files=files_to_send, reference=message)
         except discord.HTTPException as e:
             logger.error(f"Failed to send forwarded message to {destination.id}: {e}")
 
