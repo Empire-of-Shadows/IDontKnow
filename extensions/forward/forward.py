@@ -243,205 +243,730 @@ class Forwarding(commands.Cog):
             await self.forward_as_component_v2(formatting, message, destination)
 
     async def forward_as_text(self, formatting: dict, message: discord.Message, destination: discord.TextChannel):
-        """Construct and send the forwarded message as plain text."""
+        """Construct and send the forwarded message as plain text with advanced formatting."""
         content_parts = []
         embeds_to_send = []
         files_to_send = []
+        failed_attachments = []
 
-        # Prefix
+        # Dynamic prefix with variables
         if prefix := formatting.get("add_prefix"):
+            prefix = await self._parse_template_variables(prefix, message)
             content_parts.append(prefix)
 
-        # Author
+        # Enhanced author section with multiple format options
         if formatting.get("include_author", True):
-            content_parts.append(f"**From {message.author.mention}:**")
+            author_format = formatting.get("author_format", "**From {mention}:**")
+            author_text = author_format.format(
+                mention=message.author.mention,
+                name=message.author.display_name,
+                id=message.author.id,
+                discriminator=message.author.discriminator
+            )
+            content_parts.append(author_text)
 
-        # Message content
+        # Source context
+        if formatting.get("include_source", False):
+            source_text = f"*in {message.channel.mention}*"
+            if message.guild and message.guild.id != destination.guild.id:
+                source_text += f" | *{message.guild.name}*"
+            content_parts.append(source_text)
+
+        # Message content with smart truncation
         if message.content:
-            content_parts.append(message.content)
+            content = message.content
+            max_length = formatting.get("max_content_length", 2000)
+            if len(content) > max_length:
+                content = content[:max_length - 3] + "..."
+                content_parts.append(content)
+                content_parts.append(f"*(message truncated, {len(message.content)} chars total)*")
+            else:
+                content_parts.append(content)
 
-        # Suffix
+        # Dynamic suffix with variables
         if suffix := formatting.get("add_suffix"):
+            suffix = await self._parse_template_variables(suffix, message)
             content_parts.append(suffix)
 
-        final_content = "\n".join(content_parts)
+        # Build final content with conditional separators
+        separator = formatting.get("separator", "\n")
+        final_content = separator.join(filter(None, content_parts))
 
-        # Embeds
+        # Smart embed forwarding with filtering
         if formatting.get("forward_embeds", True) and message.embeds:
-            embeds_to_send.extend(message.embeds)
+            embed_filter = formatting.get("embed_filter", [])
+            for embed in message.embeds:
+                if not self._should_filter_embed(embed, embed_filter):
+                    embeds_to_send.append(embed)
 
-        # Attachments
+        # Enhanced attachment handling with size limits and types
         if formatting.get("forward_attachments", True) and message.attachments:
+            max_size = formatting.get("max_attachment_size", 25) * 1024 * 1024  # MB to bytes
+            allowed_types = formatting.get("allowed_attachment_types")
+
             for attachment in message.attachments:
                 try:
+                    if attachment.size > max_size:
+                        failed_attachments.append(f"{attachment.filename} (too large: {attachment.size // 1024}KB)")
+                        continue
+
+                    if allowed_types and not any(attachment.filename.lower().endswith(ext) for ext in allowed_types):
+                        failed_attachments.append(f"{attachment.filename} (type not allowed)")
+                        continue
+
                     f = await attachment.to_file()
                     files_to_send.append(f)
-                except discord.HTTPException as e:
-                    logger.warning(f"Failed to forward attachment {attachment.filename}: {e}")
-                    final_content += f"\n(Attachment failed to forward: {attachment.filename})"
-
-        # Send the message
-        send_kwargs = {
-            "content": final_content if final_content else None,
-            "embeds": embeds_to_send,
-            "files": files_to_send
-        }
-        if message.channel.id == destination.id:
-            send_kwargs["reference"] = message
-            try:
-                await destination.send(**send_kwargs)
-            except discord.HTTPException as e:
-                logger.error(f"Failed to send forwarded message to {destination.id} with reference: {e}")
-                if "reference" in send_kwargs:
-                    del send_kwargs["reference"]
-                await destination.send(**send_kwargs)
-        else:
-            try:
-                await destination.send(**send_kwargs)
-            except discord.HTTPException as e:
-                logger.error(f"Failed to send forwarded message to {destination.id}: {e}")
-
-    async def forward_as_embed(self, formatting: dict, message: discord.Message, destination: discord.TextChannel):
-        """Construct and send the forwarded message as an embed."""
-        embed = discord.Embed(
-            description=message.content,
-            color=discord.Color.blue(),
-            timestamp=message.created_at
-        )
-
-        if formatting.get("include_author", True):
-            embed.set_author(
-                name=f"Forwarded from {message.author.display_name}",
-                icon_url=message.author.display_avatar.url
-            )
-            embed.add_field(name="Source", value=f"[Jump to message]({message.jump_url})", inline=False)
-
-        if prefix := formatting.get("add_prefix"):
-            embed.title = prefix
-
-        if suffix := formatting.get("add_suffix"):
-            embed.set_footer(text=suffix)
-
-        files_to_send = []
-        # Handle attachments
-        if formatting.get("forward_attachments", True) and message.attachments:
-            image_set = False
-            for attachment in message.attachments:
-                try:
-                    f = await attachment.to_file()
-                    if not image_set and attachment.content_type and attachment.content_type.startswith('image/'):
-                        embed.set_image(url=f"attachment://{f.filename}")
-                        image_set = True
-                    files_to_send.append(f)
-                except discord.HTTPException as e:
-                    logger.warning(f"Failed to forward attachment {attachment.filename}: {e}")
-                    embed.add_field(name="Attachment Failed", value=attachment.filename)
-
-        embeds_to_send = [embed]
-        if formatting.get("forward_embeds", True) and message.embeds:
-            embeds_to_send.extend(message.embeds)
-            embeds_to_send = embeds_to_send[:10]
-
-        # Send the message
-        send_kwargs = {
-            "embeds": embeds_to_send,
-            "files": files_to_send
-        }
-        if message.channel.id == destination.id:
-            send_kwargs["reference"] = message
-            try:
-                await destination.send(**send_kwargs)
-            except discord.HTTPException as e:
-                logger.error(f"Failed to send forwarded message to {destination.id} with reference: {e}")
-                if "reference" in send_kwargs:
-                    del send_kwargs["reference"]
-                await destination.send(**send_kwargs)
-        else:
-            try:
-                await destination.send(**send_kwargs)
-            except discord.HTTPException as e:
-                logger.error(f"Failed to send forwarded message to {destination.id}: {e}")
-
-    async def forward_as_component_v2(self, formatting: dict, message: discord.Message, destination: discord.TextChannel):
-        """Construct and send the forwarded message using Components v2."""
-        layout = ui.LayoutView()
-        files_to_send = []
-        embeds_to_send = []
-
-        # Main container for the forwarded message
-        container = ui.Container()
-
-        # Prefix
-        if prefix := formatting.get("add_prefix"):
-            container.add_item(ui.TextDisplay(prefix))
-
-        # Author section
-        if formatting.get("include_author", True):
-            author_section = ui.Section(accessory=ui.Thumbnail(media=message.author.display_avatar.url))
-            author_section.add_item(ui.TextDisplay(f"**From {message.author.mention} in {message.channel.mention}:**"))
-            container.add_item(author_section)
-
-        # Message content
-        if message.content:
-            container.add_item(ui.TextDisplay(message.content))
-
-        # Suffix
-        if suffix := formatting.get("add_suffix"):
-            container.add_item(ui.TextDisplay(suffix))
-
-        layout.add_item(container)
-
-        # Embeds
-        if formatting.get("forward_embeds", True) and message.embeds:
-            embeds_to_send.extend(message.embeds)
-
-        # Attachments
-        failed_attachments = []
-        if formatting.get("forward_attachments", True) and message.attachments:
-            media_gallery = ui.MediaGallery()
-            for attachment in message.attachments:
-                try:
-                    f = await attachment.to_file()
-                    files_to_send.append(f)
-                    if attachment.content_type and \
-                       (attachment.content_type.startswith('image/') or attachment.content_type.startswith('video/')):
-                        media_gallery.add_item(media=f"attachment://{f.filename}")
                 except discord.HTTPException as e:
                     logger.warning(f"Failed to forward attachment {attachment.filename}: {e}")
                     failed_attachments.append(attachment.filename)
 
-            if media_gallery.items:
-                layout.add_item(ui.Separator())
-                layout.add_item(media_gallery)
-
+        # Add failed attachments notice
         if failed_attachments:
-            failed_files_text = "\n".join([f"(Attachment failed to forward: {filename})" for filename in failed_attachments])
-            layout.add_item(ui.TextDisplay(failed_files_text))
+            failed_text = "\n".join([f"⚠️ {fail}" for fail in failed_attachments])
+            final_content += f"\n\n**Failed to forward:**\n{failed_text}"
 
-        # Send the message
-        send_kwargs = {
-            "view": layout,
-            "files": files_to_send,
-            "embeds": embeds_to_send,
-            "content": None
+        # Send with retry logic and chunking
+        await self._send_with_enhanced_handling(
+            destination=destination,
+            message=message,
+            content=final_content if final_content.strip() else None,
+            embeds=embeds_to_send,
+            files=files_to_send,
+            formatting=formatting
+        )
+
+    async def forward_as_embed(self, formatting: dict, message: discord.Message, destination: discord.TextChannel):
+        """Construct and send the forwarded message as an enhanced embed."""
+        # Dynamic color system
+        embed_color = self._get_embed_color(formatting, message)
+
+        embed = discord.Embed(
+            description=message.content,
+            color=embed_color,
+            timestamp=message.created_at
+        )
+
+        # Enhanced author section with clickable link
+        if formatting.get("include_author", True):
+            author_config = formatting.get("author_config", {})
+            embed.set_author(
+                name=author_config.get("name", f"Message from {message.author.display_name}"),
+                icon_url=message.author.display_avatar.url,
+                url=message.jump_url
+            )
+
+        # Source field with context
+        if formatting.get("include_source", True):
+            source_value = f"[Jump to message]({message.jump_url})"
+            if message.guild:
+                source_value += f" • {message.channel.mention}"
+                if message.guild.id != destination.guild.id:
+                    source_value += f" • {message.guild.name}"
+            embed.add_field(name="Source", value=source_value, inline=False)
+
+        # Dynamic prefix as title
+        if prefix := formatting.get("add_prefix"):
+            prefix = await self._parse_template_variables(prefix, message)
+            embed.title = prefix
+
+        # Enhanced footer with metadata
+        footer_parts = []
+        if suffix := formatting.get("add_suffix"):
+            suffix = await self._parse_template_variables(suffix, message)
+            footer_parts.append(suffix)
+
+        # Add message metadata to footer
+        if formatting.get("include_metadata", True):
+            metadata = []
+            if message.edited_at:
+                metadata.append(f"✏️ {message.edited_at.strftime('%Y-%m-%d %H:%M')}")
+            if message.reactions:
+                metadata.append(f"❤️ {len(message.reactions)}")
+            if metadata:
+                footer_parts.append(" | ".join(metadata))
+
+        if footer_parts:
+            embed.set_footer(text=" • ".join(filter(None, footer_parts)))
+
+        # Enhanced attachment handling with galleries
+        files_to_send = []
+        if formatting.get("forward_attachments", True) and message.attachments:
+            images = []
+            other_attachments = []
+
+            for attachment in message.attachments:
+                try:
+                    f = await attachment.to_file()
+                    files_to_send.append(f)
+
+                    if attachment.content_type and attachment.content_type.startswith('image/'):
+                        images.append(attachment)
+                    else:
+                        other_attachments.append(attachment)
+                except discord.HTTPException as e:
+                    logger.warning(f"Failed to forward attachment {attachment.filename}: {e}")
+                    embed.add_field(
+                        name="⚠️ Attachment Failed",
+                        value=f"`{attachment.filename}`",
+                        inline=True
+                    )
+
+            # Set main image
+            if images and not embed.image:
+                main_image = images[0]
+                embed.set_image(url=f"attachment://{main_image.filename}")
+
+            # Add attachment list field
+            if other_attachments or len(images) > 1:
+                attachment_list = []
+                for i, att in enumerate(images[1:], 1):
+                    attachment_list.append(f"🖼️ Image {i}: `{att.filename}`")
+                for att in other_attachments:
+                    attachment_list.append(f"📎 `{att.filename}`")
+
+                if attachment_list:
+                    embed.add_field(
+                        name=f"Attachments ({len(attachment_list)})",
+                        value="\n".join(attachment_list),
+                        inline=False
+                    )
+
+        # Smart embed stacking with limits
+        embeds_to_send = [embed]
+        if formatting.get("forward_embeds", True) and message.embeds:
+            max_embeds = formatting.get("max_embeds", 10)
+            for original_embed in message.embeds[:max_embeds - 1]:
+                # Clean up potentially problematic fields
+                safe_embed = self._sanitize_embed(original_embed)
+                embeds_to_send.append(safe_embed)
+
+        # Send with enhanced handling
+        await self._send_with_enhanced_handling(
+            destination=destination,
+            message=message,
+            embeds=embeds_to_send,
+            files=files_to_send,
+            formatting=formatting
+        )
+
+    async def forward_as_component_v2(self, formatting: dict, message: discord.Message,
+                                      destination: discord.TextChannel):
+        """Construct and send the forwarded message using advanced Components v2 features."""
+        layout = ui.LayoutView()
+        files_to_send = []
+        embeds_to_send = []
+        failed_attachments = []
+
+        # Main container
+        container = ui.Container()
+
+        # Dynamic prefix
+        if prefix := formatting.get("add_prefix"):
+            prefix = await self._parse_template_variables(prefix, message)
+            container.add_item(ui.TextDisplay(f"## {prefix}"))
+
+        # Enhanced author section with avatar and metadata
+        if formatting.get("include_author", True):
+            author_accessory = None
+            if message.author.display_avatar:
+                author_accessory = ui.Thumbnail(media=message.author.display_avatar.url)
+
+            author_section = ui.Section(accessory=author_accessory)
+
+            author_text = f"**{message.author.display_name}**"
+            if formatting.get("include_timestamp", True):
+                author_text += f" • <t:{int(message.created_at.timestamp())}:R>"
+
+            author_section.add_item(ui.TextDisplay(author_text))
+
+            # Source context
+            source_text = f"in {message.channel.mention}"
+            if message.guild and message.guild.id != destination.guild.id:
+                source_text += f" • {message.guild.name}"
+            author_section.add_item(ui.TextDisplay(source_text))
+
+            container.add_item(author_section)
+            container.add_item(ui.Separator())
+
+        # Message content
+        if message.content:
+            content_display = ui.TextDisplay(message.content)
+            container.add_item(content_display)
+
+        # Interactive components
+        action_row = ui.ActionRow()
+
+        # Jump to message button
+        if formatting.get("include_jump_link", True):
+            action_row.add_item(
+                ui.Button(
+                    style=discord.ButtonStyle.link,
+                    label="View Original",
+                    url=message.jump_url
+                )
+            )
+
+        # Quick reactions if in same server
+        if message.guild and message.guild.id == destination.guild.id:
+            action_row.add_item(
+                ui.Button(
+                    style=discord.ButtonStyle.secondary,
+                    label="👍",
+                    custom_id=f"quick_react_thumbs_up:{message.id}"
+                )
+            )
+
+        if len(action_row.children) > 0:
+            container.add_item(action_row)
+
+        # Dynamic suffix
+        if suffix := formatting.get("add_suffix"):
+            suffix = await self._parse_template_variables(suffix, message)
+            container.add_item(ui.Separator())
+            container.add_item(ui.TextDisplay(suffix))
+
+        layout.add_item(container)
+
+        # Enhanced media gallery
+        if formatting.get("forward_attachments", True) and message.attachments:
+            media_attachments = [att for att in message.attachments
+                                 if att.content_type and
+                                 (att.content_type.startswith('image/') or
+                                  att.content_type.startswith('video/') or
+                                  att.content_type.startswith('audio/'))]
+
+            other_attachments = [att for att in message.attachments if att not in media_attachments]
+
+            if media_attachments:
+                layout.add_item(ui.Separator())
+                media_gallery = ui.MediaGallery()
+                for attachment in media_attachments:
+                    try:
+                        f = await attachment.to_file()
+                        files_to_send.append(f)
+                        media_gallery.add_item(media=f"attachment://{f.filename}")
+                    except discord.HTTPException as e:
+                        logger.warning(f"Failed to forward media {attachment.filename}: {e}")
+                        failed_attachments.append(attachment.filename)
+                if len(media_gallery.items) > 0:
+                    layout.add_item(media_gallery)
+
+            # File list for non-media attachments
+            if other_attachments:
+                layout.add_item(ui.Separator())
+                file_container = ui.Container()
+                file_container.add_item(ui.TextDisplay(f"## Files ({len(other_attachments)})"))
+                for attachment in other_attachments:
+                    try:
+                        f = await attachment.to_file()
+                        files_to_send.append(f)
+                        file_container.add_item(
+                            ui.TextDisplay(f"📎 {attachment.filename} ({attachment.size // 1024}KB)")
+                        )
+                    except discord.HTTPException as e:
+                        logger.warning(f"Failed to forward file {attachment.filename}: {e}")
+                        failed_attachments.append(attachment.filename)
+                layout.add_item(file_container)
+
+        # Failed attachments notice
+        if failed_attachments:
+            layout.add_item(ui.Separator())
+            error_container = ui.Container()
+            error_container.add_item(ui.TextDisplay("## ⚠️ Failed to Forward"))
+            for filename in failed_attachments:
+                error_container.add_item(ui.TextDisplay(f"`{filename}`"))
+            layout.add_item(error_container)
+
+        # Original embeds in dedicated section
+        if formatting.get("forward_embeds", True) and message.embeds:
+            layout.add_item(ui.Separator())
+            embed_container = ui.Container()
+            embed_container.add_item(ui.TextDisplay("## Original Embeds"))
+            embed_container.add_item(
+                ui.TextDisplay(f"{len(message.embeds)} embed(s) included below.")
+            )
+            layout.add_item(embed_container)
+            for embed in message.embeds[:5]:  # Limit embeds in components
+                safe_embed = self._sanitize_embed(embed)
+                embeds_to_send.append(safe_embed)
+
+        # Enhanced sending with component-specific handling
+        # The send call expects 'view' not 'layout'
+        await self._send_with_enhanced_handling(
+            destination=destination,
+            message=message,
+            view=layout,
+            files=files_to_send,
+            embeds=embeds_to_send,
+            formatting=formatting
+        )
+
+    async def _parse_template_variables(self, text: str, message: discord.Message) -> str:
+        """Parse template variables in text with enhanced variables."""
+        base_variables = {
+            '{author}': message.author.display_name,
+            '{author_mention}': message.author.mention,
+            '{author_id}': str(message.author.id),
+            '{channel}': message.channel.name,
+            '{channel_mention}': message.channel.mention,
+            '{guild}': message.guild.name if message.guild else 'DM',
+            '{timestamp}': message.created_at.strftime('%Y-%m-%d %H:%M'),
+            '{message_id}': str(message.id),
+            '{message_url}': message.jump_url,
         }
 
+        # Add conditional variables
+        if message.guild:
+            base_variables['{guild_id}'] = str(message.guild.id)
+            base_variables['{guild_icon}'] = str(message.guild.icon.url) if message.guild.icon else ''
+
+        if message.attachments:
+            base_variables['{attachment_count}'] = str(len(message.attachments))
+            base_variables['{first_attachment}'] = message.attachments[0].filename
+
+        if message.embeds:
+            base_variables['{embed_count}'] = str(len(message.embeds))
+
+        # Replace all variables
+        for var, replacement in base_variables.items():
+            text = text.replace(var, replacement)
+
+        return text
+
+    def _get_embed_color(self, formatting: dict, message: discord.Message) -> discord.Color:
+        """Get dynamic embed color based on configuration and message content."""
+        if custom_color := formatting.get("embed_color"):
+            if isinstance(custom_color, str):
+                try:
+                    return discord.Color.from_str(custom_color)
+                except ValueError:
+                    pass
+            elif isinstance(custom_color, int):
+                return discord.Color(custom_color)
+
+        # Color by author roles (if in same guild)
+        if message.guild and message.author in message.guild.members:
+            member = message.guild.get_member(message.author.id)
+            if member and member.color != discord.Color.default():
+                return member.color
+
+        # Color by content type
+        if message.attachments:
+            has_images = any(att.content_type and att.content_type.startswith('image/')
+                             for att in message.attachments)
+            return discord.Color.green() if has_images else discord.Color.blue()
+        elif message.embeds:
+            return discord.Color.purple()
+        elif len(message.content) > 200:
+            return discord.Color.orange()
+        else:
+            return discord.Color.blurple()
+
+    def _should_filter_embed(self, embed: discord.Embed, filter_rules: list) -> bool:
+        """Check if an embed should be filtered out."""
+        if not filter_rules:
+            return False
+
+        for rule in filter_rules:
+            rule = rule.lower()
+
+            if rule == "empty" and not any([
+                embed.title, embed.description, embed.fields,
+                embed.image, embed.thumbnail, embed.footer
+            ]):
+                return True
+
+            if rule == "discord" and embed.author and "discord" in embed.author.name.lower():
+                return True
+
+            if rule == "video" and embed.video:
+                return True
+
+            if rule == "ad" and any(keyword in (embed.title or "").lower()
+                                    for keyword in ['sponsor', 'advertisement', 'promoted']):
+                return True
+
+        return False
+
+    def _sanitize_embed(self, embed: discord.Embed) -> discord.Embed:
+        """Create a safe copy of an embed to avoid reference issues."""
+        safe_embed = discord.Embed(
+            title=embed.title[:256] if embed.title else None,
+            description=embed.description[:4096] if embed.description else None,
+            color=embed.color,
+            url=embed.url,
+            timestamp=embed.timestamp
+        )
+
+        if embed.author:
+            safe_embed.set_author(
+                name=embed.author.name[:256] if embed.author.name else None,
+                icon_url=embed.author.icon_url,
+                url=embed.author.url
+            )
+
+        if embed.footer:
+            safe_embed.set_footer(
+                text=embed.footer.text[:2048] if embed.footer.text else None,
+                icon_url=embed.footer.icon_url
+            )
+
+        if embed.image:
+            safe_embed.set_image(url=embed.image.url)
+
+        if embed.thumbnail:
+            safe_embed.set_thumbnail(url=embed.thumbnail.url)
+
+        # Copy fields with length limits
+        for field in embed.fields:
+            safe_embed.add_field(
+                name=field.name[:256],
+                value=field.value[:1024],
+                inline=field.inline
+            )
+
+        return safe_embed
+
+    async def _send_with_enhanced_handling(self, destination: discord.TextChannel, message: discord.Message,
+                                           **send_kwargs):
+        """Enhanced sending with better error handling and retry logic."""
+        formatting = send_kwargs.pop('formatting', {})
+
+        # Add reference if in same channel
         if message.channel.id == destination.id:
             send_kwargs["reference"] = message
-            try:
-                await destination.send(**send_kwargs)
-            except discord.HTTPException as e:
-                logger.error(f"Failed to send forwarded message to {destination.id} with reference: {e}")
-                # Fallback to sending without reference if it fails
-                if "reference" in send_kwargs:
-                    del send_kwargs["reference"]
-                await destination.send(**send_kwargs)
-        else:
-            try:
-                await destination.send(**send_kwargs)
-            except discord.HTTPException as e:
-                logger.error(f"Failed to send forwarded message to {destination.id}: {e}")
+            send_kwargs["mention_author"] = formatting.get("mention_author", False)
 
+        try:
+            await destination.send(**send_kwargs)
+        except discord.HTTPException as e:
+            logger.error(f"Failed to send forwarded message: {e}")
+
+            # Smart retry with fallbacks
+            if "message content too long" in str(e).lower():
+                await self._handle_oversized_message(destination, message, send_kwargs, formatting)
+            else:
+                # Remove problematic elements and retry
+                send_kwargs.pop('reference', None)
+                send_kwargs.pop('files', None)
+                await destination.send(
+                    content="📨 *Message forwarded (some content omitted due to size limits)*",
+                    embeds=send_kwargs.get('embeds', [])[:1]
+                )
+
+
+    async def _handle_oversized_message(self, destination: discord.TextChannel, message: discord.Message,
+                                        send_kwargs: dict, formatting: dict):
+        """Handle messages that exceed Discord's size limits with smart chunking."""
+        content = send_kwargs.get('content', '')
+        embeds = send_kwargs.get('embeds', [])
+        files = send_kwargs.get('files', [])
+
+        # Strategy 1: Split content into chunks
+        if content and len(content) > 2000:
+            await self._send_chunked_content(destination, message, content, embeds, files, formatting)
+            return
+
+        # Strategy 2: Reduce embeds
+        if embeds and len(embeds) > 10:
+            await self._send_reduced_embeds(destination, message, content, embeds, files, formatting)
+            return
+
+        # Strategy 3: Handle large files
+        if files and sum(f.size for f in files) > 25 * 1024 * 1024:  # 25MB total
+            await self._send_compressed_files(destination, message, content, embeds, files, formatting)
+            return
+
+        # Final fallback: Send minimal version
+        await self._send_minimal_version(destination, message, formatting)
+
+
+    async def _send_chunked_content(self, destination: discord.TextChannel, message: discord.Message,
+                                    content: str, embeds: list, files: list, formatting: dict):
+        """Split large content into multiple messages."""
+        chunks = self._split_content(content, max_length=1900)
+
+        # Send first chunk with essential context
+        first_chunk = chunks[0]
+        if len(chunks) > 1:
+            first_chunk += f"\n\n*(Message continued... {len(chunks)} parts total)*"
+
+        try:
+            first_message = await destination.send(
+                content=first_chunk,
+                embeds=embeds[:1] if embeds else [],  # Only first embed
+                files=files[:1] if files else []  # Only first file
+            )
+        except discord.HTTPException:
+            # If even the first chunk fails, send ultra-minimal version
+            await self._send_ultra_minimal(destination, message, formatting)
+            return
+
+        # Send remaining chunks as replies
+        for i, chunk in enumerate(chunks[1:], 2):
+            chunk_content = f"**Part {i}/{len(chunks)}:**\n{chunk}"
+            if i == len(chunks):  # Last chunk
+                # Add remaining embeds and files to last message
+                remaining_embeds = embeds[1:][:9]  # Max 10 total embeds
+                remaining_files = files[1:][:9]  # Max 10 total files
+
+                try:
+                    await first_message.reply(
+                        content=chunk_content,
+                        embeds=remaining_embeds,
+                        files=remaining_files,
+                        mention_author=False
+                    )
+                except discord.HTTPException:
+                    # Send without files if still too large
+                    await first_message.reply(
+                        content=chunk_content + "\n\n*(Some files omitted due to size limits)*",
+                        embeds=remaining_embeds,
+                        mention_author=False
+                    )
+            else:
+                await first_message.reply(
+                    content=chunk_content,
+                    mention_author=False
+                )
+
+
+    async def _send_reduced_embeds(self, destination: discord.TextChannel, message: discord.Message,
+                                   content: str, embeds: list, files: list, formatting: dict):
+        """Handle messages with too many embeds."""
+        # Create summary of omitted embeds
+        omitted_count = len(embeds) - 10
+        summary_text = f"\n\n*📊 {omitted_count} additional embeds omitted*"
+
+        # Send with max allowed embeds
+        try:
+            await destination.send(
+                content=content + summary_text,
+                embeds=embeds[:10],
+                files=files[:10]
+            )
+        except discord.HTTPException:
+            # If still too large, further reduce
+            await destination.send(
+                content=content + summary_text,
+                embeds=embeds[:5],  # Further reduce embeds
+                files=files[:3]  # Further reduce files
+            )
+
+
+    async def _send_compressed_files(self, destination: discord.TextChannel, message: discord.Message,
+                                     content: str, embeds: list, files: list, formatting: dict):
+        """Handle messages with large files."""
+        total_size = sum(f.size for f in files)
+        size_mb = total_size / (1024 * 1024)
+
+        # Create file list summary
+        file_summary = []
+        for file in files:
+            file_mb = file.size / (1024 * 1024)
+            file_summary.append(f"• {file.filename} ({file_mb:.1f}MB)")
+
+        file_list = "\n".join(file_summary[:5])  # Show first 5 files
+        if len(files) > 5:
+            file_list += f"\n• ... and {len(files) - 5} more files"
+
+        warning_msg = (
+            f"\n\n⚠️ **Files too large to forward ({size_mb:.1f}MB total):**\n"
+            f"{file_list}"
+        )
+
+        # Send without files but with summary
+        await destination.send(
+            content=content + warning_msg,
+            embeds=embeds[:10]
+        )
+
+
+    async def _send_minimal_version(self, destination: discord.TextChannel, message: discord.Message,
+                                    formatting: dict):
+        """Send a minimal version of the message."""
+        author_info = f"**From {message.author.display_name}**"
+        content_preview = message.content[:500] + "..." if len(message.content) > 500 else message.content
+
+        # Count attachments and embeds
+        stats = []
+        if message.attachments:
+            stats.append(f"{len(message.attachments)} files")
+        if message.embeds:
+            stats.append(f"{len(message.embeds)} embeds")
+
+        stats_text = f" (*{', '.join(stats)}*)" if stats else ""
+
+        minimal_content = (
+            f"{author_info}{stats_text}\n"
+            f"{content_preview}\n"
+            f"🔗 [View Original]({message.jump_url})"
+        )
+
+        await destination.send(content=minimal_content)
+
+
+    async def _send_ultra_minimal(self, destination: discord.TextChannel, message: discord.Message,
+                                  formatting: dict):
+        """Send the absolute minimal version when everything else fails."""
+        ultra_minimal = (
+            f"📨 **Message from {message.author.display_name}**\n"
+            f"Content: {len(message.content)} chars"
+            f"{f' | {len(message.attachments)} files' if message.attachments else ''}"
+            f"{f' | {len(message.embeds)} embeds' if message.embeds else ''}\n"
+            f"🔗 [View Original]({message.jump_url})"
+        )
+
+        await destination.send(content=ultra_minimal)
+
+
+    def _split_content(self, content: str, max_length: int = 1900) -> list:
+        """Split content into chunks that respect word boundaries where possible."""
+        if len(content) <= max_length:
+            return [content]
+
+        chunks = []
+        current_chunk = ""
+
+        # Split by paragraphs first
+        paragraphs = content.split('\n\n')
+
+        for paragraph in paragraphs:
+            # If adding this paragraph would exceed limit and we have content already
+            if current_chunk and len(current_chunk) + len(paragraph) + 2 > max_length:
+                chunks.append(current_chunk.strip())
+                current_chunk = ""
+
+            # If single paragraph is too long, split by sentences
+            if len(paragraph) > max_length:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = ""
+
+                # Split the long paragraph
+                sentences = paragraph.replace('. ', '.\n').split('\n')
+                for sentence in sentences:
+                    if len(sentence) > max_length:
+                        # Sentence is still too long, split by words
+                        words = sentence.split(' ')
+                        for word in words:
+                            if len(current_chunk) + len(word) + 1 > max_length:
+                                chunks.append(current_chunk.strip())
+                                current_chunk = ""
+                            current_chunk += word + " "
+                    else:
+                        if len(current_chunk) + len(sentence) + 1 > max_length:
+                            chunks.append(current_chunk.strip())
+                            current_chunk = ""
+                        current_chunk += sentence + " "
+            else:
+                current_chunk += paragraph + "\n\n"
+
+        # Add the final chunk
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+
+        return chunks
 
 async def setup(bot):
     """Setup function to add the cog to the bot."""
