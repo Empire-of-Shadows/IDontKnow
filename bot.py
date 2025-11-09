@@ -265,6 +265,25 @@ async def ping_command(ctx):
     await ctx.send(embed=embed)
 
 
+@bot.command(name="sync")
+@commands.is_owner()
+async def sync_commands(ctx):
+    """Sync slash commands globally. Owner only command."""
+    try:
+        # Sync commands globally
+        synced = await bot.tree.sync()
+        await ctx.send(f"✅ Successfully synced {len(synced)} slash commands globally!")
+        print(f"Synced {len(synced)} slash commands globally")
+
+        # Log the synced commands
+        if synced:
+            command_names = [cmd.name for cmd in synced]
+            print(f"Synced commands: {', '.join(command_names)}")
+
+    except Exception as e:
+        await ctx.send(f"❌ Failed to sync commands: {e}")
+        print(f"Failed to sync commands: {e}")
+
 # Export the bot instance for use in main.py
 def get_bot():
     return bot

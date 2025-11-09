@@ -18,6 +18,22 @@ class SetupStateManager:
         self.active_sessions: Dict[int, SetupState] = {}  # guild_id -> SetupState
         self._lock = asyncio.Lock()
 
+    # ... existing code ...
+
+    async def ensure_collection_exists(self):
+        """Ensure the setup_sessions collection exists."""
+        try:
+            # Check if collection exists, if not create it
+            collection = db_core.get_collection("discord_forwarding_bot", "setup_sessions")
+
+            # Create an index on guild_id for better performance
+            await collection.create_index("guild_id")
+            await collection.create_index("expires_at")
+
+            print("✅ Setup sessions collection initialized")
+        except Exception as e:
+            print(f"❌ Failed to initialize setup_sessions collection: {e}")
+
     async def create_session(self, guild_id: int, user_id: int) -> SetupState:
         """Create a new setup session for a guild."""
         async with self._lock:
@@ -47,6 +63,9 @@ class SetupStateManager:
     async def get_session(self, guild_id: int) -> Optional[SetupState]:
         """Get an active setup session for a guild."""
         async with self._lock:
+            # Ensure collection exists before accessing
+            await self.ensure_collection_exists()
+
             session = self.active_sessions.get(guild_id)
             if session and session.is_expired():
                 await self.cleanup_session(guild_id)
@@ -176,22 +195,30 @@ class SetupStateManager:
             print(f"Error saving session to database for guild {session.guild_id}: {e}")
 
     async def _load_session_from_db(self, guild_id: int) -> Optional[SetupState]:
-        """Load session state from database."""
+        """Load session from database."""
         try:
             collection = db_core.get_collection("discord_forwarding_bot", "setup_sessions")
 
+            # Find active session for this guild
             session_data = await collection.find_one({
-                "guild_id": guild_id,
-                "is_expired": {"$ne": True}
+                "guild_id": str(guild_id),
+                "expires_at": {"$gt": datetime.utcnow()}
             })
 
             if session_data:
-                return self._deserialize_session(session_data)
+                # Convert back to SetupState object
+                return SetupState.from_dict(session_data)
+
+            return None
 
         except Exception as e:
-            print(f"Error loading session from database for guild {guild_id}: {e}")
-
-        return None
+            if "not found" in str(e).lower():
+                # Collection doesn't exist, create it
+                await self.ensure_collection_exists()
+                return None
+            else:
+                print(f"Error loading session from database: {e}")
+                return None
 
     async def _remove_session_from_db(self, guild_id: int):
         """Remove session from database after completion."""
@@ -205,18 +232,10 @@ class SetupStateManager:
     def _serialize_session(self, session: SetupState) -> Dict:
         """Convert SetupState object to dictionary for database storage."""
         try:
-            return {
-                "guild_id": session.guild_id,
-                "user_id": session.user_id,
-                "created_at": session.created_at,
-                "last_activity": session.last_activity,
-                "expires_at": session.expires_at,
-                "current_step": session.current_step,
-                "completed_steps": session.completed_steps,
-                "data": session.data,
-                "is_expired": False,
-                "updated_at": datetime.now(timezone.utc)
-            }
+            session_data = session.to_dict()
+            session_data["updated_at"] = datetime.now(timezone.utc)
+            session_data["is_expired"] = False
+            return session_data
         except Exception as e:
             print(f"Error serializing session: {e}")
             return {}
@@ -224,21 +243,7 @@ class SetupStateManager:
     def _deserialize_session(self, session_data: Dict) -> Optional[SetupState]:
         """Convert database dictionary back to SetupState object."""
         try:
-            session = SetupState(
-                guild_id=session_data["guild_id"],
-                user_id=session_data["user_id"]
-            )
-
-            # Restore session state
-            session.created_at = session_data.get("created_at", session.created_at)
-            session.last_activity = session_data.get("last_activity", session.last_activity)
-            session.expires_at = session_data.get("expires_at", session.expires_at)
-            session.current_step = session_data.get("current_step", session.current_step)
-            session.completed_steps = session_data.get("completed_steps", session.completed_steps)
-            session.data = session_data.get("data", session.data)
-
-            return session
-
+            return SetupState.from_dict(session_data)
         except Exception as e:
             print(f"Error deserializing session data: {e}")
             return None

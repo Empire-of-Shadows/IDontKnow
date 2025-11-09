@@ -8,6 +8,7 @@ import discord
 class ChannelSelector:
     """Handles interactive channel selection."""
 
+
     async def create_channel_select_menu(self, guild: discord.Guild,
                                          channel_type: str = "text",
                                          custom_id: str = "channel_select") -> discord.ui.View:
@@ -52,23 +53,8 @@ class ChannelSelector:
                 custom_id=custom_id
             )
 
-        select.callback = self._create_select_callback(custom_id)
+        # Don't add a callback - let the main setup handler deal with it
         view.add_item(select)
-
-        # Add navigation buttons
-        view.add_item(discord.ui.Button(
-            label="Back",
-            style=discord.ButtonStyle.secondary,
-            custom_id="channel_back",
-            emoji="⬅️"
-        ))
-
-        view.add_item(discord.ui.Button(
-            label="Cancel",
-            style=discord.ButtonStyle.danger,
-            custom_id="channel_cancel",
-            emoji="✖️"
-        ))
 
         return view
 
@@ -91,15 +77,6 @@ class ChannelSelector:
         channels.sort(key=lambda c: c.position)
 
         return channels
-
-    def _create_select_callback(self, custom_id: str) -> Callable:
-        """Create a callback function for channel selection."""
-
-        async def select_callback(interaction: discord.Interaction):
-            # This will be handled by the main setup flow
-            await interaction.response.defer()
-
-        return select_callback
 
     async def validate_channel_access(self, guild: discord.Guild, channel_id: int) -> Tuple[bool, str]:
         """

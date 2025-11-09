@@ -7,7 +7,7 @@ from tabulate import tabulate
 
 from dotenv import load_dotenv
 
-from core.bot import bot
+from bot import bot
 from logger.logger_setup import get_logger, log_performance
 
 load_dotenv()
@@ -54,25 +54,6 @@ def log_command_details(guild_name: str, commands_list) -> None:
 
 	except Exception as e:
 		logger.error(f"Failed to log command details for {guild_name}: {e}")
-
-
-@log_performance("attach_databases")
-async def attach_databases() -> None:
-	"""
-    Attaches runtime resources (e.g., channels) to the bot and logs status.
-    Grouped logs show ✅ successes and ❌ failures.
-    """
-	logger.info("Starting runtime attachment process...")
-	success_logs = []
-	failed_logs = []
-
-	# Summary logging
-	if success_logs:
-		logger.info(f"Successfully attached {len(success_logs)} channels")
-	if failed_logs:
-		logger.warning(f"Failed to attach {len(failed_logs)} channels")
-
-	logger.info("Attachment process completed")
 
 @log_performance("load_cogs")
 async def load_cogs() -> None:
@@ -129,9 +110,6 @@ def _discover_cog_modules(base_dirs: List[str]) -> List[str]:
 				total_files_scanned += 1
 
 				if not file.endswith(".py"):
-					continue
-				if file.startswith("__"):
-					logger.debug(f"Skipping dunder file: {file}")
 					continue
 
 				module_name = generate_cog_module_name(root, file)

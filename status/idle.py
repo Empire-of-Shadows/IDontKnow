@@ -8,7 +8,7 @@ from discord.ext import tasks
 
 from dotenv import load_dotenv
 
-from core.bot import bot
+from bot import bot
 from logger.logger_setup import get_logger, log_performance, log_context
 
 load_dotenv()
