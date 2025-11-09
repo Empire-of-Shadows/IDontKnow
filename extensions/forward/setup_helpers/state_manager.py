@@ -215,7 +215,7 @@ class SetupStateManager:
                 "completed_steps": session.completed_steps,
                 "data": session.data,
                 "is_expired": False,
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.now(timezone.utc)
             }
         except Exception as e:
             print(f"Error serializing session: {e}")
