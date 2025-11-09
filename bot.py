@@ -1,0 +1,270 @@
+import discord
+from discord.ext import commands
+import asyncio
+
+# Import the new database manager
+from database import db_core, guild_manager, ensure_database_connection, get_guild_settings
+
+# Global variable to store error_notifier reference
+error_notifier = None
+
+
+def set_error_notifier(notifier):
+    """Set the error notifier instance from main.py"""
+    global error_notifier
+    error_notifier = notifier
+
+
+async def get_prefix(bot, message):
+    """Get the command prefix for a guild."""
+    if not message.guild:
+        return commands.when_mentioned_or("!")(bot, message)
+
+    try:
+        # Ensure database connection
+        if not await ensure_database_connection():
+            return commands.when_mentioned_or("!")(bot, message)
+
+        # Get guild settings
+        settings = await get_guild_settings(str(message.guild.id))
+        prefix = settings.get("command_prefix", "!")
+        return commands.when_mentioned_or(prefix)(bot, message)
+
+    except Exception as e:
+        print(f"Error getting prefix for guild {message.guild.id}: {e}")
+        return commands.when_mentioned_or("!")(bot, message)
+
+
+# Define intents
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True  # If you need member events
+intents.guilds = True  # For guild join/leave events
+
+# Create a bot instance
+bot = commands.AutoShardedBot(
+    command_prefix=get_prefix,
+    intents=intents,
+    help_command=None,
+    case_insensitive=True
+)
+
+
+@bot.event
+async def on_ready():
+    """Called when the bot is ready and connected to Discord."""
+    print(f'✅ Logged in as {bot.user} (ID: {bot.user.id})')
+    print(f'📊 Connected to {len(bot.guilds)} guilds')
+    print('------')
+
+    # Connect to the database
+    try:
+        if not db_core.is_healthy():
+            success = await db_core.initialize()
+            if success:
+                print('✅ Database connection established')
+
+                # Initialize default settings for all current guilds
+                await initialize_existing_guilds()
+            else:
+                print('❌ Failed to connect to database')
+        else:
+            print('✅ Database connection already healthy')
+
+    except Exception as e:
+        print(f'❌ Database connection error: {e}')
+
+
+async def initialize_existing_guilds():
+    """Initialize database settings for all guilds the bot is currently in."""
+    print('🏰 Initializing settings for existing guilds...')
+
+    initialized_count = 0
+    for guild in bot.guilds:
+        try:
+            await guild_manager.setup_new_guild(str(guild.id), guild.name)
+            initialized_count += 1
+        except Exception as e:
+            print(f'❌ Failed to initialize guild {guild.name}: {e}')
+
+    print(f'✅ Initialized settings for {initialized_count}/{len(bot.guilds)} guilds')
+
+
+@bot.event
+async def on_guild_join(guild):
+    """Called when the bot joins a new guild."""
+    print(f'🤖 Bot joined guild: {guild.name} (ID: {guild.id})')
+
+    try:
+        # Auto-setup the new guild in database
+        settings = await guild_manager.setup_new_guild(str(guild.id), guild.name)
+        print(f'✅ Auto-configured guild: {guild.name}')
+
+        # Send welcome message if enabled
+        await send_welcome_message(guild, settings)
+
+    except Exception as e:
+        print(f'❌ Failed to setup guild {guild.name}: {e}')
+
+
+@bot.event
+async def on_guild_remove(guild):
+    """Called when the bot leaves a guild."""
+    print(f'👋 Bot left guild: {guild.name} (ID: {guild.id})')
+
+    try:
+        # Clean up guild data from database
+        success = await guild_manager.remove_guild_data(str(guild.id), guild.name)
+        if success:
+            print(f'✅ Removed data for guild: {guild.name}')
+        else:
+            print(f'⚠️ Partial cleanup for guild: {guild.name}')
+
+    except Exception as e:
+        print(f'❌ Error removing guild data for {guild.name}: {e}')
+
+
+async def send_welcome_message(guild, settings):
+    """Send a welcome message to the new guild."""
+    try:
+        # Get bot settings to check if welcome messages are enabled
+        bot_settings_collection = db_core.get_collection("discord_forwarding_bot", "bot_settings")
+        bot_settings = await bot_settings_collection.find_one({"_id": "global_config"})
+
+        if not bot_settings or not bot_settings.get("welcome_message_enabled", True):
+            return
+
+        # Find a suitable channel to send welcome message
+        system_channel = guild.system_channel
+        if system_channel and system_channel.permissions_for(guild.me).send_messages:
+            channel = system_channel
+        else:
+            # Try to find any text channel with send permissions
+            for text_channel in guild.text_channels:
+                if text_channel.permissions_for(guild.me).send_messages:
+                    channel = text_channel
+                    break
+            else:
+                print(f"⚠️ No suitable channel found for welcome message in {guild.name}")
+                return
+
+        # Create welcome embed
+        embed = discord.Embed(
+            title="🤖 Message Forwarding Bot",
+            description="Thanks for adding me to your server! I can forward messages between channels with advanced filtering.",
+            color=discord.Color.green()
+        )
+
+        embed.add_field(
+            name="Getting Started",
+            value="Use `/setup` to configure your first forwarding rule or `/help` to see all commands.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Key Features",
+            value="• Cross-channel message forwarding\n• Advanced content filtering\n• Media and link support\n• Premium features available",
+            inline=False
+        )
+
+        embed.set_footer(text="Use /help for more information")
+
+        await channel.send(embed=embed)
+        print(f'📝 Sent welcome message to guild: {guild.name}')
+
+    except Exception as e:
+        print(f'❌ Failed to send welcome message to {guild.name}: {e}')
+
+
+@bot.event
+async def close():
+    """Called when the bot is shutting down."""
+    print('🔄 Bot is shutting down. Cleaning up...')
+
+    # Disconnect from the database
+    try:
+        if db_core.is_healthy():
+            await db_core.close()
+            print('✅ Database connection closed')
+    except Exception as e:
+        print(f'❌ Error closing database connection: {e}')
+
+    # Shutdown error notifier if available
+    if error_notifier:
+        try:
+            await error_notifier.shutdown()
+            print('✅ Error notifier shut down')
+        except Exception as e:
+            print(f'❌ Error shutting down error notifier: {e}')
+
+    print('👋 Bot shutdown complete')
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    """Global error handler for commands."""
+    if isinstance(error, commands.CommandNotFound):
+        return  # Ignore command not found errors
+
+    print(f'❌ Command error in {ctx.guild.name if ctx.guild else "DM"}: {error}')
+
+    # Send error message to user
+    if isinstance(error, commands.BotMissingPermissions):
+        await ctx.send("❌ I don't have the required permissions to execute this command.")
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ You don't have the required permissions to use this command.")
+    elif isinstance(error, commands.CommandOnCooldown):
+        await ctx.send(f"⏰ This command is on cooldown. Try again in {error.retry_after:.1f} seconds.")
+    else:
+        await ctx.send("❌ An error occurred while executing this command.")
+
+        # Notify error notifier if available
+        if error_notifier:
+            try:
+                await error_notifier.notify_error(
+                    f"Command error in {ctx.guild.name if ctx.guild else 'DM'}",
+                    str(error),
+                    ctx.command.name if ctx.command else "Unknown"
+                )
+            except Exception as e:
+                print(f'❌ Failed to notify error: {e}')
+
+
+# Example command to test database functionality
+@bot.command(name="ping")
+async def ping_command(ctx):
+    """Check bot latency and database connection."""
+    # Calculate latency
+    latency = round(bot.latency * 1000)
+
+    # Check database health
+    db_healthy = db_core.is_healthy()
+    db_status = "✅ Connected" if db_healthy else "❌ Disconnected"
+
+    # Get guild settings
+    try:
+        settings = await get_guild_settings(str(ctx.guild.id))
+        prefix = settings.get("command_prefix", "!")
+        guild_status = "✅ Configured"
+    except Exception as e:
+        prefix = "!"
+        guild_status = f"❌ Error: {e}"
+
+    embed = discord.Embed(
+        title="🏓 Pong!",
+        color=discord.Color.blue()
+    )
+
+    embed.add_field(name="Bot Latency", value=f"{latency}ms", inline=True)
+    embed.add_field(name="Database", value=db_status, inline=True)
+    embed.add_field(name="Guild Settings", value=guild_status, inline=True)
+    embed.add_field(name="Prefix", value=prefix, inline=True)
+    embed.add_field(name="Shards", value=bot.shard_count, inline=True)
+    embed.add_field(name="Guilds", value=len(bot.guilds), inline=True)
+
+    await ctx.send(embed=embed)
+
+
+# Export the bot instance for use in main.py
+def get_bot():
+    return bot
