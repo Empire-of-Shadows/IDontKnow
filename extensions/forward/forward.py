@@ -3,7 +3,6 @@ from discord.ext import commands
 from discord import app_commands, ui
 from database import guild_manager
 from logger.logger_setup import get_logger
-import asyncio
 
 logger = get_logger(__name__, level=20)
 

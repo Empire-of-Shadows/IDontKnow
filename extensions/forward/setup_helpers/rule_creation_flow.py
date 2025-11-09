@@ -1,5 +1,5 @@
 import discord
-from typing import Optional, Tuple
+from typing import Tuple
 
 from ..models.setup_state import SetupState
 from .channel_select import channel_selector
@@ -169,9 +169,15 @@ class RuleCreationFlow:
         )
         embed = await rule_setup_helper.create_rule_preview_embed(rule, interaction.guild)
         from ..setup_helpers.button_manager import button_manager
+        edit_settings_button = {
+            "label": "Edit Settings",
+            "style": discord.ButtonStyle.secondary,
+            "custom_id": "rule_edit_settings",
+            "disabled": not session.is_editing  # Disable if not editing an existing rule
+        }
         view = button_manager.create_button_row([
             {"label": "Create Rule", "style": discord.ButtonStyle.success, "custom_id": "rule_final_create"},
-            {"label": "Edit Settings", "style": discord.ButtonStyle.secondary, "custom_id": "rule_edit_settings"},
+            edit_settings_button,
             {"label": "Start Over", "style": discord.ButtonStyle.danger, "custom_id": "rule_start_over"}
         ])
 
@@ -216,8 +222,13 @@ class RuleCreationFlow:
                 "rule_name": rule.get("name"),
                 "source_channel_id": rule.get("source_channel_id"),
                 "destination_channel_id": rule.get("destination_channel_id"),
-                "enabled": rule.get("enabled", True),
-                "settings": rule.get("settings", {})
+                "enabled": rule.get("is_active", True),
+                "settings": {
+                    "message_types": rule.get("message_types", {}),
+                    "filters": rule.get("filters", {}),
+                    "formatting": rule.get("formatting", {}),
+                    "advanced_options": rule.get("advanced_options", {})
+                }
             }
 
             save_result = await guild_manager.add_rule(guild_id=interaction.guild_id, **rule_data)

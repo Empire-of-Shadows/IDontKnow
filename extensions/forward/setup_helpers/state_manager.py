@@ -1,7 +1,6 @@
 import asyncio
-from typing import Dict, Optional, List
+from typing import Dict, Optional
 from datetime import datetime, timedelta, timezone
-import json
 
 from database import db_core
 from ..models.setup_state import SetupState

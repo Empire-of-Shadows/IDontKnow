@@ -1,4 +1,4 @@
-from typing import List, Optional, Callable, Tuple
+from typing import List, Optional, Tuple
 import discord
 
 from logger.logger_setup import get_logger
@@ -13,7 +13,8 @@ class ChannelSelector:
 
     async def create_channel_select_menu(self, guild: discord.Guild,
                                          channel_type: str = "text",
-                                         custom_id: str = "channel_select") -> discord.ui.View:
+                                         custom_id: str = "channel_select",
+                                         default_value: Optional[str] = None) -> discord.ui.View:
         """
         Create a channel selection dropdown menu.
         This view is used in the setup wizard to allow the user to select a
@@ -50,7 +51,8 @@ class ChannelSelector:
                 option = discord.SelectOption(
                     label=f"#{channel.name}"[:100],  # Discord limit
                     value=str(channel.id),
-                    description=channel.topic[:100] if hasattr(channel, 'topic') and channel.topic else None
+                    description=channel.topic[:100] if hasattr(channel, 'topic') and channel.topic else None,
+                    default=str(channel.id) == default_value
                 )
                 options.append(option)
 

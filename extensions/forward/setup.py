@@ -6,13 +6,12 @@ components to guide the user through a multi-step configuration process.
 import discord
 from discord.ext import commands
 from discord import app_commands
-from typing import Optional
 
 from .setup_helpers.state_manager import state_manager
 from .setup_helpers.button_manager import button_manager
 from .setup_helpers.permission_check import permission_checker
 from .setup_helpers.channel_select import channel_selector
-from .setup_helpers.rule_setup import RuleSetupHelper, rule_setup_helper
+from .setup_helpers.rule_setup import rule_setup_helper
 from .setup_helpers.rule_creation_flow import RuleCreationFlow
 from .models.setup_state import SetupState
 from database import guild_manager
@@ -352,6 +351,15 @@ class ForwardCog(commands.Cog):
                 return
 
             session = await state_manager.create_session(str(interaction.guild_id), interaction.user.id)
+            
+            # Pre-fill existing settings
+            guild_settings = await self.guild_manager.get_guild_settings(str(interaction.guild_id))
+            if guild_settings:
+                log_channel_id = guild_settings.get("master_log_channel_id")
+                if log_channel_id:
+                    session.master_log_channel = log_channel_id
+                    await state_manager.update_session(str(interaction.guild_id), {"master_log_channel_id": log_channel_id})
+
             await self.show_welcome_step(interaction, session)
 
         except Exception as e:
@@ -421,7 +429,7 @@ class ForwardCog(commands.Cog):
         guild = interaction.guild
 
         can_proceed, reason = await permission_checker.can_proceed_with_setup(guild)
-        permission_embed = await permission_checker.create_permission_embed(guild)
+
 
         embed = discord.Embed(
             title="🔐 Permission Check",
@@ -507,6 +515,14 @@ class ForwardCog(commands.Cog):
         """
         embed = await channel_selector.create_channel_embed(interaction.guild, "log_channel")
 
+        # Show current setting if it exists
+        if session.master_log_channel:
+            channel = interaction.guild.get_channel(session.master_log_channel)
+            if channel:
+                embed.add_field(name="Current Log Channel", value=channel.mention, inline=False)
+            else:
+                embed.add_field(name="Current Log Channel", value="*Channel not found or inaccessible*", inline=False)
+
         progress = session.get_progress()
         embed.add_field(
             name="📊 Progress",
@@ -514,7 +530,46 @@ class ForwardCog(commands.Cog):
             inline=True
         )
 
-        view = await channel_selector.create_channel_select_menu(interaction.guild, "text", "log_channel_select")
+        select_view = await channel_selector.create_channel_select_menu(
+            interaction.guild,
+            "text",
+            "log_channel_select",
+            default_value=str(session.master_log_channel) if session.master_log_channel else None
+        )
+        
+        # Create a new view to hold both the select menu and the buttons
+        view = discord.ui.View(timeout=select_view.timeout)
+        view.add_item(select_view.children[0]) # Add the select menu
+
+        buttons = []
+        buttons.append({
+            "label": "Back",
+            "style": button_manager.SECONDARY,
+            "custom_id": "channel_back",
+            "emoji": "⬅️",
+            "row": 1
+        })
+
+        if session.master_log_channel:
+            buttons.append({
+                "label": "Continue",
+                "style": button_manager.SUCCESS,
+                "custom_id": "log_channel_continue",
+                "emoji": "➡️",
+                "row": 1
+            })
+
+        buttons.append({
+            "label": "Cancel",
+            "style": button_manager.DANGER,
+            "custom_id": "channel_cancel",
+            "emoji": "✖️",
+            "row": 1
+        })
+        
+        button_row = button_manager.create_button_row(buttons)
+        for item in button_row.children:
+            view.add_item(item)
 
         try:
             if interaction.response.is_done():
@@ -745,6 +800,9 @@ class ForwardCog(commands.Cog):
                 self.logger.info(f"Rechecking permissions for guild {interaction.guild_id}")
                 await self.show_permission_step(interaction, session)
 
+            elif custom_id == "log_channel_continue":
+                self.logger.info(f"Log channel continue button pressed for guild {interaction.guild_id}")
+                await self.show_first_rule_step(interaction, session)
             # --- Rule Creation & Editing Flow ---
             elif custom_id == "rule_create":
                 self.logger.info(f"Starting rule creation for guild {interaction.guild_id}")
@@ -845,7 +903,9 @@ class ForwardCog(commands.Cog):
                 channel_id = int(values[0])
                 is_valid, message = await channel_selector.validate_channel_access(interaction.guild, channel_id)
                 if is_valid:
-                    await state_manager.update_session(interaction.guild_id, {"master_log_channel": channel_id})
+                    await state_manager.update_session(interaction.guild_id, {"master_log_channel_id": channel_id})
+                    # Persist the change to the database
+                    await self.guild_manager.update_guild_settings(str(interaction.guild_id), {"master_log_channel_id": channel_id})
                     await interaction.response.send_message(f"✅ Log channel set to {interaction.guild.get_channel(channel_id).mention}", ephemeral=True)
                     await self.show_first_rule_step(interaction, session)
                 else:
@@ -918,18 +978,15 @@ class ForwardCog(commands.Cog):
             color=discord.Color.green()
         )
         
-        await state_manager.cleanup_session(str(interaction.guild_id))
-        
         try:
             await interaction.edit_original_response(embed=embed, view=None)
-        except discord.HTTPException as e:
-            if "already been acknowledged" in str(e).lower():
-                try:
-                    await interaction.edit_original_response(embed=embed, view=None)
-                except discord.HTTPException:
-                    await interaction.followup.send(embed=embed, ephemeral=True)
-            else:
-                raise e
+        except discord.HTTPException:
+            try:
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            except discord.HTTPException as followup_error:
+                self.logger.error(f"Failed to send followup message after original response failed: {followup_error}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error in show_setup_complete: {e}", exc_info=True)
 
     async def handle_test_rule(self, interaction: discord.Interaction, session: SetupState):
         """
@@ -961,14 +1018,13 @@ class ForwardCog(commands.Cog):
 
         try:
             await interaction.edit_original_response(embed=embed, view=None)
-        except discord.HTTPException as e:
-            if "already been acknowledged" in str(e).lower():
-                try:
-                    await interaction.edit_original_response(embed=embed, view=None)
-                except discord.HTTPException:
-                    await interaction.followup.send(embed=embed, ephemeral=True)
-            else:
-                raise e
+        except discord.HTTPException:
+            try:
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            except discord.HTTPException as followup_error:
+                self.logger.error(f"Failed to send followup message after original response failed: {followup_error}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error in handle_cancel_button: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):

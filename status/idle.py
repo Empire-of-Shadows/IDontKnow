@@ -269,7 +269,7 @@ def _choose_status_type() -> str:
             fallback = "playing"  # Last resort
 
         logger.warning(f"No valid candidates found! Using fallback: {fallback}")
-        logger.debug(f"Fallback selection reason: no candidates available after filtering")
+        logger.debug("Fallback selection reason: no candidates available after filtering")
         return fallback
 
     # Weighted selection
@@ -446,7 +446,7 @@ async def rotate_status():
 
             logger.debug("Step 3: Updating bot presence")
             await bot.change_presence(status=discord.Status.online, activity=activity)
-            logger.info(f"✅ Bot presence updated successfully")
+            logger.info("✅ Bot presence updated successfully")
 
             # Track last types to reduce repetition
             status_type = random_status["type"]
@@ -488,7 +488,7 @@ async def _rotate_status_before_loop():
         user_count = sum(g.member_count or 0 for g in bot.guilds) if bot.guilds else 0
         latency = int((bot.latency or 0) * 1000)
 
-        logger.info(f"📊 Initial bot metrics:")
+        logger.info("📊 Initial bot metrics:")
         logger.info(f"   • Guilds: {guild_count}")
         logger.info(f"   • Users: {user_count:,}")
         logger.info(f"   • Latency: {latency}ms")

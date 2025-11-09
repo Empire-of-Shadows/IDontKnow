@@ -1,15 +1,14 @@
 import asyncio
 import os
 import json
-import traceback
 from collections import Counter, defaultdict, deque
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
-from typing import Dict, List, Optional, Any, Tuple, Set
-from dataclasses import dataclass, asdict
+from typing import Dict, List, Optional, Any, Tuple
+from dataclasses import dataclass
 from enum import Enum
 import html
 import re
@@ -671,7 +670,7 @@ class EnhancedErrorNotifier:
         self.correlation_window = timedelta(minutes=5)
         self.pattern_threshold = 5  # Similar errors in window
 
-        print(f"🚀 Enhanced Error Notifier initialized")
+        print("🚀 Enhanced Error Notifier initialized")
         print(f"   📧 Email: {email}")
         print(f"   ⏱️ Interval: {interval}s")
         print(f"   📊 Max errors per email: {max_errors_per_email}")
@@ -811,7 +810,7 @@ class EnhancedErrorNotifier:
             # Also send to Discord if configured
             if self.bot_instance and log_channel_id:
                 await _send_discord_alert(self.bot_instance, error_context)
-            print(f"🚨 Sent immediate critical alert")
+            print("🚨 Sent immediate critical alert")
         except Exception as e:
             print(f"❌ Failed to send immediate alert: {e}")
 
@@ -992,7 +991,7 @@ class EnhancedErrorNotifier:
             print(f"❌ Failed to send email (attempt {self.consecutive_failures}): {e}")
 
             if self.consecutive_failures >= self.max_failures:
-                print(f"🚫 Maximum email failures reached. Disabling email notifications temporarily.")
+                print("🚫 Maximum email failures reached. Disabling email notifications temporarily.")
 
     async def start_loop(self, bot_instance: commands.Bot):
         """Enhanced background loop with comprehensive error processing"""
@@ -1012,7 +1011,7 @@ class EnhancedErrorNotifier:
 
                 # Skip if too many consecutive failures
                 if self.consecutive_failures >= self.max_failures:
-                    print(f"⏭️ Skipping email send due to consecutive failures")
+                    print("⏭️ Skipping email send due to consecutive failures")
                     self.errors.clear()
                     self.error_counter.clear()
                     continue

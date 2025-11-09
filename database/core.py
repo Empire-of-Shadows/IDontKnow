@@ -1,10 +1,8 @@
 import os
 import asyncio
 import signal
-import json
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
-from pathlib import Path
 from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
@@ -344,7 +342,7 @@ class DatabaseCore:
             logger.error(f"Database verification failed: {e}", exc_info=True)
             raise DatabaseConnectionError(f"Database verification failed: {e}") from e
 
-        logger.info(f"📊 Verification Summary:")
+        logger.info("📊 Verification Summary:")
         logger.info(f"  • Databases: {verification_stats['databases']}")
         logger.info(f"  • Collections: {verification_stats['collections']}")
         logger.info(f"  • Total documents: {verification_stats['total_documents']:,}")
@@ -443,7 +441,7 @@ class DatabaseCore:
 
                 return result
 
-            except Exception as e:
+            except Exception:
                 if attempt < max_retries:
                     logger.warning(f"⚠️ Operation attempt {attempt} failed, retrying: {operation_name}")
                     await asyncio.sleep(0.5 * attempt)

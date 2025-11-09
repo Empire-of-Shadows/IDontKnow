@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 from bot import get_bot, set_error_notifier
 from core.sync import load_cogs
 from logger.logger_setup import setup_application_logging, EmailErrorHandler
-from logger.log_dispacher import EnhancedErrorNotifier, Severity, ErrorCategory
-from database import db_core, guild_manager, ensure_database_connection
+from logger.log_dispacher import EnhancedErrorNotifier, Severity
+from database import db_core, guild_manager
 
 load_dotenv()
 

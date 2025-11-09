@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands
-import asyncio
 
 from database import db_core, guild_manager, ensure_database_connection, get_guild_settings
 
