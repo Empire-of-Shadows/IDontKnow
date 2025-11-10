@@ -25,7 +25,7 @@ class LearnMoreView(discord.ui.View):
         self.cog = cog
         self.session = session
 
-    @discord.ui.button(label="Start Setup", style=discord.ButtonStyle.success, emoji="🚀")
+    @discord.ui.button(label="Start Setup", style=discord.ButtonStyle.success, emoji="🚀") # Type: Ignore
     async def start_setup_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle Start Setup button"""
         try:
@@ -35,11 +35,11 @@ class LearnMoreView(discord.ui.View):
             self.cog.logger.error(f"Error in start setup button: {e}", exc_info=True)
             await interaction.followup.send("❌ An error occurred. Please try again.", ephemeral=True)
 
-    @discord.ui.button(label="Back to Welcome", style=discord.ButtonStyle.secondary, emoji="⬅️")
+    @discord.ui.button(label="Back to Welcome", style=discord.ButtonStyle.secondary, emoji="⬅️") # Type: Ignore
     async def back_to_welcome_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle Back to Welcome button"""
         try:
-            await interaction.response.defer(ephemeral=True)
+            await interaction.response.defer(ephemeral=True) # Type: Ignore
             await self.cog.show_welcome_step(interaction, self.session)
         except Exception as e:
             self.cog.logger.error(f"Error in back to welcome button: {e}", exc_info=True)
@@ -129,7 +129,7 @@ class FormattingSettingsView(discord.ui.View):
         style_select.callback = self.style_select_callback
         self.add_item(style_select)
 
-        back_button = discord.ui.Button(label="Back to Main Settings", style=discord.ButtonStyle.primary, row=4)
+        back_button = discord.ui.Button(label="Back to Main Settings", style=discord.ButtonStyle.primary, row=4) # Type: Ignore
         back_button.callback = self.back_to_main_settings_callback
         self.add_item(back_button)
 
@@ -157,7 +157,7 @@ class FormattingSettingsView(discord.ui.View):
 
         view = FormattingSettingsView(self.session, self.cog)
         embed = view.create_embed()
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embed=embed, view=view) # Type: Ignore
 
     async def back_to_main_settings_callback(self, interaction: discord.Interaction):
         """
@@ -166,7 +166,7 @@ class FormattingSettingsView(discord.ui.View):
         """
         view = RuleSettingsView(self.session, self.cog)
         embed = await view.create_settings_embed(interaction.guild)
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embed=embed, view=view) # Type: Ignore
 
 
 class RuleSettingsView(discord.ui.View):
@@ -180,11 +180,11 @@ class RuleSettingsView(discord.ui.View):
         self.session = session
         self.cog = cog
 
-        name_button = discord.ui.Button(label="Name", style=discord.ButtonStyle.secondary, emoji="📝")
+        name_button = discord.ui.Button(label="Name", style=discord.ButtonStyle.secondary, emoji="📝") # Type: Ignore
         name_button.callback = self.edit_name_callback
         self.add_item(name_button)
 
-        channels_button = discord.ui.Button(label="Channels", style=discord.ButtonStyle.secondary, emoji="🔄")
+        channels_button = discord.ui.Button(label="Channels", style=discord.ButtonStyle.secondary, emoji="🔄") # Type: Ignore
         channels_button.callback = self.edit_channels_callback
         self.add_item(channels_button)
         
@@ -194,15 +194,15 @@ class RuleSettingsView(discord.ui.View):
         active_button.callback = self.toggle_active_callback
         self.add_item(active_button)
 
-        formatting_button = discord.ui.Button(label="Formatting", style=discord.ButtonStyle.secondary, emoji="🎨")
+        formatting_button = discord.ui.Button(label="Formatting", style=discord.ButtonStyle.secondary, emoji="🎨") # Type: Ignore
         formatting_button.callback = self.edit_formatting_callback
         self.add_item(formatting_button)
 
-        save_button = discord.ui.Button(label="Save and Exit", style=discord.ButtonStyle.success, row=4)
+        save_button = discord.ui.Button(label="Save and Exit", style=discord.ButtonStyle.success, row=4) # Type: Ignore
         save_button.callback = self.save_and_exit_callback
         self.add_item(save_button)
 
-        back_button = discord.ui.Button(label="Back to Preview", style=discord.ButtonStyle.primary, row=4)
+        back_button = discord.ui.Button(label="Back to Preview", style=discord.ButtonStyle.primary, row=4) # Type: Ignore
         back_button.callback = self.back_to_preview_callback
         self.add_item(back_button)
 
@@ -255,17 +255,17 @@ class RuleSettingsView(discord.ui.View):
             
             view = RuleSettingsView(self.session, self.cog)
             embed = await view.create_settings_embed(modal_interaction.guild)
-            await modal_interaction.response.edit_message(embed=embed, view=view)
+            await modal_interaction.response.edit_message(embed=embed, view=view) # Type: Ignore
 
         modal = RuleNameModal(modal_callback, current_name=self.session.current_rule.get("rule_name"))
-        await interaction.response.send_modal(modal)
+        await interaction.response.send_modal(modal) # Type: Ignore
 
     async def edit_channels_callback(self, interaction: discord.Interaction):
         """
         Callback for the edit channels button. This feature is not yet
         implemented.
         """
-        await interaction.response.send_message("Editing channels is not implemented yet. This will be added in a future update.", ephemeral=True)
+        await interaction.response.send_message("Editing channels is not implemented yet. This will be added in a future update.", ephemeral=True) # Type: Ignore
 
     async def toggle_active_callback(self, interaction: discord.Interaction):
         """
@@ -278,7 +278,7 @@ class RuleSettingsView(discord.ui.View):
 
         new_view = RuleSettingsView(self.session, self.cog)
         embed = await new_view.create_settings_embed(interaction.guild)
-        await interaction.response.edit_message(embed=embed, view=new_view)
+        await interaction.response.edit_message(embed=embed, view=new_view) # Type: Ignore
 
     async def edit_formatting_callback(self, interaction: discord.Interaction):
         """
@@ -287,7 +287,7 @@ class RuleSettingsView(discord.ui.View):
         """
         view = FormattingSettingsView(self.session, self.cog)
         embed = view.create_embed()
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embed=embed, view=view) # Type: Ignore
 
     async def back_to_preview_callback(self, interaction: discord.Interaction):
         """
@@ -301,7 +301,7 @@ class RuleSettingsView(discord.ui.View):
         Callback for the save and exit button. It saves the rule to the
         database and ends the setup session.
         """
-        await interaction.response.defer()
+        await interaction.response.defer() # Type: Ignore
 
         success, message = await self.cog.update_final_rule(interaction, self.session)
         
@@ -325,7 +325,7 @@ class ForwardCog(commands.Cog):
         self.bot = bot
         self.logger = None
         self.guild_manager = guild_manager
-        self.rule_creation_flow = RuleCreationFlow(bot)
+        self.rule_creation_flow = RuleCreationFlow(bot, self)
 
     async def cog_load(self):
         """Initializes the logger for this cog when it's loaded."""
@@ -344,14 +344,14 @@ class ForwardCog(commands.Cog):
             rules = await self.guild_manager.get_all_rules(str(interaction.guild_id))
 
             if not rules:
-                await interaction.response.send_message(
+                await interaction.response.send_message( # Type: Ignore
                     "🤔 No forwarding rules found for this server. Use `/forward setup` to create one.",
                     ephemeral=True
                 )
                 return
 
             view = RuleSelectView(rules, self)
-            await interaction.response.send_message(
+            await interaction.response.send_message( # Type: Ignore
                 "Please select a rule to edit:",
                 view=view,
                 ephemeral=True
@@ -359,7 +359,7 @@ class ForwardCog(commands.Cog):
 
         except Exception as e:
             self.logger.error(f"Error starting edit session: {e}", exc_info=True)
-            await interaction.response.send_message(
+            await interaction.response.send_message( # Type: Ignore
                 "❌ An error occurred while trying to edit a rule. Please try again.",
                 ephemeral=True
             )
@@ -373,7 +373,7 @@ class ForwardCog(commands.Cog):
         """
         try:
             if not interaction.user.guild_permissions.manage_guild:
-                await interaction.response.send_message(
+                await interaction.response.send_message( # Type: Ignore
                     "❌ You need the 'Manage Server' permission to run setup.",
                     ephemeral=True
                 )
@@ -393,7 +393,7 @@ class ForwardCog(commands.Cog):
 
         except Exception as e:
             self.logger.error(f"Error starting setup: {e}", exc_info=True)
-            await interaction.response.send_message(
+            await interaction.response.send_message( # Type: Ignore
                 "❌ An error occurred starting setup. Please try again.",
                 ephemeral=True
             )
@@ -428,10 +428,10 @@ class ForwardCog(commands.Cog):
         view = button_manager.get_welcome_buttons()
 
         try:
-            if interaction.response.is_done():
+            if interaction.response.is_done(): # Type: Ignore
                 await interaction.edit_original_response(embed=embed, view=view)
             else:
-                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True) # Type: Ignore
         except discord.HTTPException as e:
             if "already been acknowledged" in str(e).lower() or "unknown interaction" in str(e).lower():
                 try:
@@ -482,10 +482,10 @@ class ForwardCog(commands.Cog):
         view = self._get_permission_step_buttons(can_proceed)
 
         try:
-            if interaction.response.is_done():
+            if interaction.response.is_done(): # Type: Ignore
                 await interaction.edit_original_response(embed=embed, view=view)
             else:
-                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True) # Type: Ignore
         except discord.HTTPException as e:
             if "already been acknowledged" in str(e):
                 try:
@@ -602,7 +602,7 @@ class ForwardCog(commands.Cog):
             view.add_item(discord.ui.Button(
                 label="No text channels available",
                 disabled=True,
-                style=discord.ButtonStyle.secondary
+                style=discord.ButtonStyle.secondary # Type: Ignore
             ))
 
         # Create button row
@@ -610,7 +610,7 @@ class ForwardCog(commands.Cog):
 
         back_button = discord.ui.Button(
             label="Back",
-            style=discord.ButtonStyle.secondary,
+            style=discord.ButtonStyle.secondary, # Type: Ignore
             custom_id="log_channel_back",
             emoji="⬅️",
             row=1
@@ -633,7 +633,7 @@ class ForwardCog(commands.Cog):
         if has_log_channel:
             continue_button = discord.ui.Button(
                 label="Continue",
-                style=discord.ButtonStyle.success,
+                style=discord.ButtonStyle.success, # Type: Ignore
                 custom_id="log_channel_continue",
                 emoji="➡️",
                 row=1
@@ -643,7 +643,7 @@ class ForwardCog(commands.Cog):
 
         cancel_button = discord.ui.Button(
             label="Cancel",
-            style=discord.ButtonStyle.danger,
+            style=discord.ButtonStyle.danger, # Type: Ignore
             custom_id="channel_cancel",
             emoji="✖️",
             row=1
@@ -656,10 +656,10 @@ class ForwardCog(commands.Cog):
             view.add_item(item)
 
         try:
-            if interaction.response.is_done():
+            if interaction.response.is_done(): # Type: Ignore
                 await interaction.edit_original_response(embed=embed, view=view)
             else:
-                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True) # Type: Ignore
         except discord.HTTPException as e:
             if "already been acknowledged" in str(e).lower():
                 try:
@@ -673,12 +673,16 @@ class ForwardCog(commands.Cog):
             "step": "log_channel"
         })
 
+
+
+
+
     async def _handle_log_channel_select(self, interaction: discord.Interaction):
         """Handle log channel selection"""
         try:
             # Check if interaction is already acknowledged
-            if not interaction.response.is_done():
-                await interaction.response.defer(ephemeral=True)
+            if not interaction.response.is_done(): # Type: Ignore
+                await interaction.response.defer(ephemeral=True) # Type: Ignore
             else:
                 # If already acknowledged, we can't defer, so just proceed
                 self.logger.debug("Interaction already acknowledged, proceeding without defer")
@@ -725,7 +729,7 @@ class ForwardCog(commands.Cog):
     async def _handle_log_channel_continue(self, interaction: discord.Interaction):
         """Handle continue button in log channel step"""
         try:
-            await interaction.response.defer(ephemeral=True)
+            await interaction.response.defer(ephemeral=True) # Type: Ignore
 
             session = await state_manager.get_session(str(interaction.guild_id))
             if not session:
@@ -742,7 +746,7 @@ class ForwardCog(commands.Cog):
     async def _handle_log_channel_cancel(self, interaction: discord.Interaction):
         """Handle cancel button in log channel step"""
         try:
-            await interaction.response.defer(ephemeral=True)
+            await interaction.response.defer(ephemeral=True) # Type: Ignore
             await self.handle_cancel_button(interaction, None)  # session will be fetched in handle_cancel_button
 
         except Exception as e:
@@ -797,10 +801,10 @@ class ForwardCog(commands.Cog):
         ])
 
         try:
-            if interaction.response.is_done():
+            if interaction.response.is_done(): # Type: Ignore
                 await interaction.edit_original_response(embed=embed, view=view)
             else:
-                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True) # Type: Ignore
         except discord.HTTPException as e:
             if "already been acknowledged" in str(e).lower():
                 try:
@@ -845,10 +849,10 @@ class ForwardCog(commands.Cog):
         view = LearnMoreView(self, session)
 
         try:
-            if interaction.response.is_done():
+            if interaction.response.is_done(): # Type: Ignore
                 await interaction.edit_original_response(embed=embed, view=view)
             else:
-                await interaction.response.edit_message(embed=embed, view=view)
+                await interaction.response.edit_message(embed=embed, view=view) # Type: Ignore
         except discord.HTTPException as e:
             if "already been acknowledged" in str(e).lower() or "unknown interaction" in str(e).lower():
                 try:
@@ -887,7 +891,7 @@ class ForwardCog(commands.Cog):
 
         modal = RuleNameModal(modal_callback)
 
-        if interaction.response.is_done():
+        if interaction.response.is_done(): # Type: Ignore
             self.logger.warning(
                 f"Cannot show modal - interaction already acknowledged for guild {interaction.guild_id}")
             await interaction.followup.send(
@@ -896,7 +900,7 @@ class ForwardCog(commands.Cog):
             )
         else:
             self.logger.debug(f"Showing rule name modal for guild {interaction.guild_id}")
-            await interaction.response.send_modal(modal)
+            await interaction.response.send_modal(modal) # Type: Ignore
             self.logger.info(f"Rule name modal displayed successfully for guild {interaction.guild_id}")
 
     async def show_rule_edit_step(self, interaction: discord.Interaction, session: SetupState):
@@ -907,14 +911,14 @@ class ForwardCog(commands.Cog):
         """
         view = RuleSettingsView(session, self)
         embed = await view.create_settings_embed(interaction.guild)
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embed=embed, view=view) # Type: Ignore
 
     async def _handle_log_channel_back(self, interaction: discord.Interaction):
         """Handle back button in log channel step"""
         try:
             # Check if interaction is already acknowledged
-            if not interaction.response.is_done():
-                await interaction.response.defer(ephemeral=True)
+            if not interaction.response.is_done(): # Type: Ignore
+                await interaction.response.defer(ephemeral=True) # Type: Ignore
 
             session = await state_manager.get_session(str(interaction.guild_id))
             if not session:
@@ -945,19 +949,29 @@ class ForwardCog(commands.Cog):
             return
 
         try:
-            # Defer the interaction immediately to prevent timeout
-            if not interaction.response.is_done():
-                await interaction.response.defer(ephemeral=True)
-
             session = await state_manager.get_session(str(interaction.guild_id))
             if not session:
                 self.logger.warning(f"No session found for guild {interaction.guild_id}")
-                await interaction.followup.send("❌ Setup session expired or not found. Please run `/setup` again.",
-                                                ephemeral=True)
+                # If no session, we can't defer, so send ephemeral message directly
+                await interaction.response.send_message(
+                    "❌ Setup session expired or not found. Please run `/setup` again.",
+                    ephemeral=True
+                )
                 return
 
             session.update_activity()
             self.logger.debug(f"Session activity updated for guild {interaction.guild_id}")
+
+            # Special handling for modals: do not defer if we are about to send a modal
+            if custom_id == "rule_name_input":
+                self.logger.info(f"Showing rule name input modal for guild {interaction.guild_id}")
+                # Do NOT defer here, as we are sending a modal directly
+                await self.show_rule_name_modal(interaction, session)
+                return # Exit after sending modal
+
+            # For all other buttons, defer the interaction
+            if not interaction.response.is_done(): # Type: Ignore
+                await interaction.response.defer(ephemeral=True) # Type: Ignore
 
             # --- Welcome & Learn More Flow ---
             if custom_id == "setup_start":
@@ -1062,8 +1076,8 @@ class ForwardCog(commands.Cog):
         except Exception as e:
             self.logger.error(f"Error handling button interaction ({custom_id}): {e}", exc_info=True)
             try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("❌ An error occurred. Please run `/setup` again.",
+                if not interaction.response.is_done(): # Type: Ignore
+                    await interaction.response.send_message("❌ An error occurred. Please run `/setup` again.", # Type: Ignore
                                                             ephemeral=True)
                 else:
                     await interaction.followup.send("❌ An error occurred. Please run `/setup` again.", ephemeral=True)
@@ -1072,12 +1086,12 @@ class ForwardCog(commands.Cog):
 
     async def handle_select_menu(self, interaction: discord.Interaction):
         """
-        Router for all select menu interactions.
+        Router for all select menu interactions that don't have direct callbacks.
         """
         try:
             # Defer the interaction immediately to prevent timeout
-            if not interaction.response.is_done():
-                await interaction.response.defer(ephemeral=True)
+            if not interaction.response.is_done(): # Type: Ignore
+                await interaction.response.defer(ephemeral=True) # Type: Ignore
 
             session = await state_manager.get_session(str(interaction.guild_id))
             if not session:
@@ -1089,15 +1103,14 @@ class ForwardCog(commands.Cog):
             if not values:
                 return
 
-            # Remove the log_channel_select handling from here since we're handling it directly now
-            # Only handle rule channel selections here
-
             # --- Rule Channel Selection ---
             if custom_id == "rule_source_select":
                 await self.rule_creation_flow.handle_channel_selection(interaction, session, "source", int(values[0]))
             elif custom_id == "rule_dest_select":
-                await self.rule_creation_flow.handle_channel_selection(interaction, session, "destination",
-                                                                       int(values[0]))
+                await self.rule_creation_flow.handle_channel_selection(interaction, session, "destination", int(values[0]))
+            else:
+                self.logger.warning(f"Unhandled select menu: {custom_id}")
+                await interaction.followup.send("This select menu isn't implemented yet.", ephemeral=True)
 
         except Exception as e:
             self.logger.error(f"Error handling select menu: {e}", exc_info=True)
@@ -1169,14 +1182,14 @@ class ForwardCog(commands.Cog):
         Handle the test rule button.
         This feature is not yet implemented.
         """
-        await interaction.response.send_message("Testing rules is not yet implemented.", ephemeral=True)
+        await interaction.response.send_message("Testing rules is not yet implemented.", ephemeral=True) # Type: Ignore
 
     async def handle_manage_rules(self, interaction: discord.Interaction, session: SetupState):
         """
         Handle the manage rules button.
         This feature is not yet implemented.
         """
-        await interaction.response.send_message("Managing rules is not yet implemented.", ephemeral=True)
+        await interaction.response.send_message("Managing rules is not yet implemented.", ephemeral=True) # Type: Ignore
 
     async def handle_cancel_button(self, interaction: discord.Interaction, session: SetupState):
         """
@@ -1212,7 +1225,7 @@ class ForwardCog(commands.Cog):
         if interaction.type == discord.InteractionType.component:
             custom_id = interaction.data.get('custom_id', '')
 
-            # Skip buttons that have direct callbacks
+            # Skip components that have direct callbacks
             if custom_id in ["log_channel_continue", "channel_cancel", "log_channel_select"]:
                 self.logger.debug(f"Skipping {custom_id} as it has direct callback")
                 return

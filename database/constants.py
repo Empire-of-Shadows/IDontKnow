@@ -51,6 +51,6 @@ DEFAULT_GUILD_SETTINGS_TEMPLATE = {
         "daily_messages": 100,
         "rule_creation_enabled": True
     },
-    "rules": {
-    }
+    "rules": [
+    ]
 }

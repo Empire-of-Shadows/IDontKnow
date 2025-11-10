@@ -10,8 +10,9 @@ from logger.logger_setup import get_logger
 class RuleCreationFlow:
     """Handles the step-by-step process of creating a forwarding rule."""
 
-    def __init__(self, bot):
+    def __init__(self, bot, cog):
         self.bot = bot
+        self.cog = cog
         self.logger = get_logger("RuleCreationFlow", level=20, json_format=False, colored_console=True)
 
     async def start_rule_creation(self, interaction: discord.Interaction, session: SetupState):
@@ -29,27 +30,70 @@ class RuleCreationFlow:
         self.logger.debug(f"Rule session initialized for guild {interaction.guild_id}")
         await self.show_source_channel_step(interaction, session)
 
+    # In your RuleCreationFlow class or in the ForwardCog, update the channel selection methods:
+
     async def show_source_channel_step(self, interaction: discord.Interaction, session: SetupState):
-        """
-        Show the source channel selection step.
-        This is the first step in creating a new rule.
-        """
-        self.logger.debug(f"Showing source channel selection for guild {interaction.guild_id}")
-        embed = await channel_selector.create_channel_embed(interaction.guild, "source_channel")
-        view = await channel_selector.create_channel_select_menu(
-            interaction.guild, "text", "rule_source_select"
+        """Show source channel selection step with direct callbacks"""
+        embed = discord.Embed(
+            title="📥 Select Source Channel",
+            description="Choose the channel where messages will be forwarded **FROM**.\n\n"
+                        "This is the channel that will be monitored for new messages.",
+            color=discord.Color.blue()
         )
 
+        # Create select menu with direct callback
+        view = discord.ui.View(timeout=300)
+
+        select_options = []
+        for channel in interaction.guild.text_channels:
+            if channel.permissions_for(interaction.guild.me).view_channel:
+                select_options.append(
+                    discord.SelectOption(
+                        label=f"#{channel.name}"[:25],
+                        value=str(channel.id),
+                        description=f"ID: {channel.id}"[:50]
+                    )
+                )
+
+        if select_options:
+            select_menu = discord.ui.Select(
+                placeholder="Select source channel...",
+                options=select_options[:25],
+                custom_id="rule_source_select"
+            )
+            view.add_item(select_menu)
+        else:
+            view.add_item(discord.ui.Button(
+                label="No accessible channels found",
+                disabled=True,
+                style=discord.ButtonStyle.secondary # Type: Ignore
+            ))
+
+        # Add navigation buttons
+        back_button = discord.ui.Button(
+            label="Back",
+            style=discord.ButtonStyle.secondary, # Type: Ignore
+            custom_id="rule_source_back",
+            emoji="⬅️",
+            row=1
+        )
+        view.add_item(back_button)
+
+        cancel_button = discord.ui.Button(
+            label="Cancel",
+            style=discord.ButtonStyle.danger, # Type: Ignore
+            custom_id="rule_source_cancel",
+            emoji="✖️",
+            row=1
+        )
+        view.add_item(cancel_button)
+
         try:
-            if interaction.response.is_done():
+            if interaction.response.is_done(): # Type: Ignore
                 await interaction.edit_original_response(embed=embed, view=view)
             else:
-                await interaction.response.send_message(embed=embed, view=view)
-            self.logger.info(f"Source channel selection displayed for guild {interaction.guild_id}")
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True) # Type: Ignore
         except discord.HTTPException as e:
-            self.logger.error(f"Error displaying source channel selection: {e}", exc_info=True)
-            # This error handling is for a race condition where the bot tries to respond
-            # to an interaction that has already been acknowledged. The fallback is to edit.
             if "already been acknowledged" in str(e).lower():
                 try:
                     await interaction.edit_original_response(embed=embed, view=view)
@@ -59,24 +103,67 @@ class RuleCreationFlow:
                 raise e
 
     async def show_destination_channel_step(self, interaction: discord.Interaction, session: SetupState):
-        """
-        Show the destination channel selection step.
-        This is the second step in creating a new rule.
-        """
-        self.logger.debug(f"Showing destination channel selection for guild {interaction.guild_id}")
-        embed = await channel_selector.create_channel_embed(interaction.guild, "destination_channel")
-        view = await channel_selector.create_channel_select_menu(
-            interaction.guild, "text", "rule_dest_select"
+        """Show destination channel selection step with direct callbacks"""
+        embed = discord.Embed(
+            title="📤 Select Destination Channel",
+            description="Choose the channel where messages will be forwarded **TO**.\n\n"
+                        "This is where the forwarded messages will appear.",
+            color=discord.Color.blue()
         )
 
+        # Create select menu with direct callback
+        view = discord.ui.View(timeout=300)
+
+        select_options = []
+        for channel in interaction.guild.text_channels:
+            if channel.permissions_for(interaction.guild.me).send_messages:
+                select_options.append(
+                    discord.SelectOption(
+                        label=f"#{channel.name}"[:25],
+                        value=str(channel.id),
+                        description=f"ID: {channel.id}"[:50]
+                    )
+                )
+
+        if select_options:
+            select_menu = discord.ui.Select(
+                placeholder="Select destination channel...",
+                options=select_options[:25],
+                custom_id="rule_dest_select"
+            )
+            view.add_item(select_menu)
+        else:
+            view.add_item(discord.ui.Button(
+                label="No writable channels found",
+                disabled=True,
+                style=discord.ButtonStyle.secondary # Type: Ignore
+            ))
+
+        # Add navigation buttons
+        back_button = discord.ui.Button(
+            label="Back",
+            style=discord.ButtonStyle.secondary, # Type: Ignore
+            custom_id="rule_dest_back",
+            emoji="⬅️",
+            row=1
+        )
+        view.add_item(back_button)
+
+        cancel_button = discord.ui.Button(
+            label="Cancel",
+            style=discord.ButtonStyle.danger, # Type: Ignore
+            custom_id="rule_dest_cancel",
+            emoji="✖️",
+            row=1
+        )
+        view.add_item(cancel_button)
+
         try:
-            if interaction.response.is_done():
+            if interaction.response.is_done(): # Type: Ignore
                 await interaction.edit_original_response(embed=embed, view=view)
             else:
-                await interaction.response.send_message(embed=embed, view=view)
-            self.logger.info(f"Destination channel selection displayed for guild {interaction.guild_id}")
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True) # Type: Ignore
         except discord.HTTPException as e:
-            self.logger.error(f"Error displaying destination channel selection: {e}", exc_info=True)
             if "already been acknowledged" in str(e).lower():
                 try:
                     await interaction.edit_original_response(embed=embed, view=view)
@@ -96,19 +183,19 @@ class RuleCreationFlow:
 
         if not is_valid:
             self.logger.warning(f"Invalid channel selection: {message} for guild {interaction.guild_id}")
-            await interaction.response.send_message(f"❌ {message}", ephemeral=True)
+            await interaction.followup.send(f"❌ {message}", ephemeral=True)
             return
 
         if channel_type == "source":
             session.current_rule["source_channel_id"] = channel_id
             self.logger.info(f"Source channel set to {channel_id} for guild {interaction.guild_id}")
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"✅ Source channel set to {interaction.guild.get_channel(channel_id).mention}", ephemeral=True)
             await self.show_destination_channel_step(interaction, session)
         elif channel_type == "destination":
             session.current_rule["destination_channel_id"] = channel_id
             self.logger.info(f"Destination channel set to {channel_id} for guild {interaction.guild_id}")
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"✅ Destination channel set to {interaction.guild.get_channel(channel_id).mention}", ephemeral=True)
             await self.show_rule_name_step(interaction, session)
 
@@ -130,10 +217,10 @@ class RuleCreationFlow:
         ])
 
         try:
-            if interaction.response.is_done():
+            if interaction.response.is_done(): # Type: Ignore
                 await interaction.edit_original_response(embed=embed, view=view)
             else:
-                await interaction.response.send_message(embed=embed, view=view)
+                await interaction.response.send_message(embed=embed, view=view) # Type: Ignore
             self.logger.info(f"Rule name step displayed for guild {interaction.guild_id}")
         except discord.HTTPException as e:
             self.logger.error(f"Error displaying rule name step: {e}", exc_info=True)
@@ -182,10 +269,10 @@ class RuleCreationFlow:
         ])
 
         try:
-            if interaction.response.is_done():
+            if interaction.response.is_done(): # Type: Ignore
                 await interaction.edit_original_response(embed=embed, view=view)
             else:
-                await interaction.response.send_message(embed=embed, view=view)
+                await interaction.response.send_message(embed=embed, view=view) # Type: Ignore
             self.logger.info(f"Rule preview displayed for guild {interaction.guild_id}")
         except discord.HTTPException as e:
             self.logger.error(f"Error displaying rule preview: {e}", exc_info=True)
