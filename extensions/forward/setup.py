@@ -398,6 +398,44 @@ class ForwardCog(commands.Cog):
                 ephemeral=True
             )
 
+    @forward.command(name="help", description="Get help and information about the forwarding bot.")
+    async def help_command(self, interaction: discord.Interaction):
+        """
+        Provides descriptive help on how to use the message forwarding bot.
+        """
+        embed = discord.Embed(
+            title="🤖 Message Forwarding Bot Help",
+            description="This bot helps you automatically forward messages between channels in your Discord server.",
+            color=discord.Color.blue()
+        )
+
+        embed.add_field(
+            name="`/forward setup`",
+            value="Starts an interactive wizard to configure new message forwarding rules. "
+                  "You'll be guided through setting up permissions, a log channel, and your first rule.",
+            inline=False
+        )
+        embed.add_field(
+            name="`/forward edit`",
+            value="Allows you to view and modify existing forwarding rules. "
+                  "You can change rule names, source/destination channels, activation status, and formatting.",
+            inline=False
+        )
+        embed.add_field(
+            name="How it works:",
+            value="Once a rule is set up, the bot will monitor the specified **source channel** "
+                  "and automatically repost messages to the **destination channel**. "
+                  "You can configure various filters and formatting options during setup or editing.",
+            inline=False
+        )
+        embed.add_field(
+            name="Need more assistance?",
+            value="If you encounter any issues or have further questions, please contact support or refer to the documentation.",
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     async def show_welcome_step(self, interaction: discord.Interaction, session: SetupState):
         """
         Show the welcome step of setup.

@@ -29,7 +29,7 @@ Let me rethink this with a user-centric, logic-first approach:
    - Basic rule configuration
 
 4. **Optional Features Setup**
-   - **Status**: ⏳ In Progress
+   - **Status**: 📝 Planned
    - Advanced filtering (yes/no)
    - Custom formatting (yes/no)
    - Notifications (yes/no)
@@ -38,13 +38,13 @@ Let me rethink this with a user-centric, logic-first approach:
 - **Status**: ✅ Complete
 - Buttons that don't disappear
 - Context-aware button states
-- Timeout handling with resume capability
+- Timeout handling
 - Save/restore setup progress
 
 ## Phase 2: Core Forwarding Logic
 
 ### 3. **Message Listening & Processing**
-- **Status**: ✅ Complete
+- **Status**: 📝 Planned
 - Watch configured source channels
 - Apply rule filters in real-time (basic filters: keywords, length, message types)
 - Handle different message types (text, media, links, embeds, files, stickers)
@@ -58,13 +58,13 @@ Let me rethink this with a user-centric, logic-first approach:
 ## Phase 3: Rule Management
 
 ### 5. **Interactive Rule Management**
-- **Status**: ❌ Not Started
+- **Status**: 📝 Planned (Adding and editing rules implemented; dedicated `/rules` command and deletion planned)
 - `/rules` - Manage existing rules with interactive menus
 - Add new rules (reusing setup components)
 - Edit/delete rules with preview
 
 ### 6. **Rule Testing & Validation**
-- **Status**: ❌ Not Started
+- **Status**: 📝 Planned (Validation and preview implemented; dedicated testing planned)
 - Test rules before saving
 - Preview what gets forwarded
 - Validate channel permissions
@@ -72,13 +72,13 @@ Let me rethink this with a user-centric, logic-first approach:
 ## Phase 4: Advanced Features
 
 ### 7. **Advanced Filtering** (if user opted in)
-- **Status**: ❌ Not Started
+- **Status**: 📝 Planned (Keyword filters implemented; user/role restrictions and more granular content type filtering planned)
 - Keyword filters
 - User/role restrictions
 - Content type filtering
 
 ### 8. **Message Formatting** (if user opted in)
-- **Status**: ❌ Not Started
+- **Status**: 📝 Planned (Custom templates, author attribution, and basic embed customization implemented; advanced embed customization planned)
 - Custom templates
 - Embed customization
 - Author attribution
@@ -86,13 +86,13 @@ Let me rethink this with a user-centric, logic-first approach:
 ## Phase 5: Premium & Polish
 
 ### 9. **Premium Feature Gates**
-- **Status**: ❌ Not Started
+- **Status**: 📝 Planned (Limit checks implemented; upgrade prompts and feature unlocking planned)
 - Limit checks
 - Upgrade prompts
 - Feature unlocking
 
 ### 10. **Analytics & Monitoring**
-- **Status**: ❌ Not Started
+- **Status**: 📝 Planned (Error logging and forwarded message logging implemented; usage tracking and performance metrics planned)
 - Usage tracking
 - Performance metrics
 - Error reporting
@@ -104,28 +104,3 @@ Let me rethink this with a user-centric, logic-first approach:
 3. **Fewer Abandoned Setups**: Interactive guidance reduces confusion
 4. **Better Testing**: Core logic gets tested through real user workflows
 5. **Natural Feature Discovery**: Users encounter features when they need them
-
-## Implementation Order:
-
-**Week 1: Interactive Setup Foundation**
-- Setup wizard framework
-- Persistent button system
-- Channel selection flows
-- Database schema for setup state
-
-**Week 2: Core Forwarding**
-- Message listener
-- Basic forwarding engine
-- Error handling
-
-**Week 3: Rule Management**
-- Interactive rule editor
-- Rule testing
-- Management commands
-
-**Week 4+: Advanced Features**
-- Progressive enhancement based on user feedback
-
-This way, we build the **experience** first, then the **functionality** to support that experience. The commands become natural extensions of the interactive flows rather than the primary interface.
-
-What do you think? Should we start with the setup wizard framework and persistent button system?
