@@ -543,13 +543,19 @@ class ForwardCog(commands.Cog):
         """
         embed = await channel_selector.create_channel_embed(interaction.guild, "log_channel")
 
-        # Show current setting if it exists
+        # Show current setting if it exists - handle MongoDB BSON format
         if session.master_log_channel:
-            channel = interaction.guild.get_channel(session.master_log_channel)
+            channel_id = session.master_log_channel
+            # Handle MongoDB BSON format for 64-bit integers
+            if isinstance(channel_id, dict) and "$numberLong" in channel_id:
+                channel_id = int(channel_id["$numberLong"])
+
+            channel = interaction.guild.get_channel(channel_id)
             if channel:
                 embed.add_field(name="Current Log Channel", value=channel.mention, inline=False)
             else:
-                embed.add_field(name="Current Log Channel", value="*Channel not found or inaccessible*", inline=False)
+                embed.add_field(name="Current Log Channel",
+                                value=f"ID: {channel_id} (Channel not found or inaccessible)", inline=False)
 
         progress = session.get_progress()
         embed.add_field(
@@ -563,12 +569,19 @@ class ForwardCog(commands.Cog):
         select_options = []
         for channel in interaction.guild.text_channels:
             if channel.permissions_for(interaction.guild.me).send_messages:
+                # Get current channel ID for default selection
+                current_channel_id = None
+                if session.master_log_channel:
+                    current_channel_id = session.master_log_channel
+                    if isinstance(current_channel_id, dict) and "$numberLong" in current_channel_id:
+                        current_channel_id = int(current_channel_id["$numberLong"])
+
                 select_options.append(
                     discord.SelectOption(
                         label=f"#{channel.name}"[:25],
                         value=str(channel.id),
                         description=f"ID: {channel.id}"[:50],
-                        default=(channel.id == session.master_log_channel)
+                        default=(channel.id == current_channel_id)
                     )
                 )
 
@@ -594,10 +607,11 @@ class ForwardCog(commands.Cog):
 
         # Create button row
         button_row = discord.ui.View(timeout=300)  # Separate view for buttons to ensure proper row layout
+
         back_button = discord.ui.Button(
             label="Back",
             style=discord.ButtonStyle.secondary,
-            custom_id="log_channel_back",  # Changed to log_channel_back to avoid conflict
+            custom_id="log_channel_back",
             emoji="⬅️",
             row=1
         )
@@ -605,7 +619,18 @@ class ForwardCog(commands.Cog):
         button_row.add_item(back_button)
 
         # Only add continue button if log channel is set
+        has_log_channel = False
         if session.master_log_channel:
+            # Handle MongoDB BSON format
+            if isinstance(session.master_log_channel, dict) and "$numberLong" in session.master_log_channel:
+                channel_id = int(session.master_log_channel["$numberLong"])
+                channel = interaction.guild.get_channel(channel_id)
+                has_log_channel = channel is not None
+            else:
+                channel = interaction.guild.get_channel(session.master_log_channel)
+                has_log_channel = channel is not None
+
+        if has_log_channel:
             continue_button = discord.ui.Button(
                 label="Continue",
                 style=discord.ButtonStyle.success,
@@ -651,7 +676,12 @@ class ForwardCog(commands.Cog):
     async def _handle_log_channel_select(self, interaction: discord.Interaction):
         """Handle log channel selection"""
         try:
-            await interaction.response.defer(ephemeral=True)
+            # Check if interaction is already acknowledged
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True)
+            else:
+                # If already acknowledged, we can't defer, so just proceed
+                self.logger.debug("Interaction already acknowledged, proceeding without defer")
 
             session = await state_manager.get_session(str(interaction.guild_id))
             if not session:
@@ -679,12 +709,18 @@ class ForwardCog(commands.Cog):
             await self.guild_manager.update_guild_settings(str(interaction.guild_id),
                                                            {"master_log_channel_id": channel_id})
 
+            # Send confirmation message
+            await interaction.followup.send(f"✅ Log channel set to {channel.mention}", ephemeral=True)
+
             # Refresh the view to show the continue button
             await self.show_log_channel_step(interaction, session)
 
         except Exception as e:
             self.logger.error(f"Error handling log channel select: {e}", exc_info=True)
-            await interaction.followup.send("❌ An error occurred. Please try again.", ephemeral=True)
+            try:
+                await interaction.followup.send("❌ An error occurred. Please try again.", ephemeral=True)
+            except:
+                pass  # If we can't send followup, just log the error
 
     async def _handle_log_channel_continue(self, interaction: discord.Interaction):
         """Handle continue button in log channel step"""
@@ -702,28 +738,6 @@ class ForwardCog(commands.Cog):
         except Exception as e:
             self.logger.error(f"Error handling log channel continue: {e}", exc_info=True)
             await interaction.followup.send("❌ An error occurred. Please try again.", ephemeral=True)
-
-    async def _handle_log_channel_back(self, interaction: discord.Interaction):
-        """Handle back button in log channel step"""
-        try:
-            # Check if interaction is already acknowledged
-            if not interaction.response.is_done():
-                await interaction.response.defer(ephemeral=True)
-
-            session = await state_manager.get_session(str(interaction.guild_id))
-            if not session:
-                await interaction.followup.send("Session expired. Please run `/setup` again.", ephemeral=True)
-                return
-
-            await self.show_permission_step(interaction, session)
-
-        except Exception as e:
-            self.logger.error(f"Error handling log channel back: {e}", exc_info=True)
-            # If we can't send a followup, just log the error
-            try:
-                await interaction.followup.send("❌ An error occurred. Please try again.", ephemeral=True)
-            except:
-                pass
 
     async def _handle_log_channel_cancel(self, interaction: discord.Interaction):
         """Handle cancel button in log channel step"""
@@ -1199,7 +1213,7 @@ class ForwardCog(commands.Cog):
             custom_id = interaction.data.get('custom_id', '')
 
             # Skip buttons that have direct callbacks
-            if custom_id in ["log_channel_continue", "channel_cancel"]:
+            if custom_id in ["log_channel_continue", "channel_cancel", "log_channel_select"]:
                 self.logger.debug(f"Skipping {custom_id} as it has direct callback")
                 return
 
