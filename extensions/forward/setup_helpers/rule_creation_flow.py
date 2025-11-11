@@ -20,7 +20,11 @@ class RuleCreationFlow:
         Starts the rule creation flow by initializing a new rule in the user's
         session and showing the first step (source channel selection).
         """
-        session = await state_manager.create_session(interaction.guild_id, interaction.user.id)
+        session = await state_manager.get_session(interaction.guild_id)
+        if not session:
+            # If no session is found, create one. This might happen if the session expired right at this moment.
+            session = await state_manager.create_session(interaction.guild_id, interaction.user.id)
+
         self.logger.info(f"Starting rule creation for guild {interaction.guild_id}")
         session.current_rule = {
             "step": "source_channel"
@@ -180,6 +184,11 @@ class RuleCreationFlow:
         This method is called when the user selects a channel from the dropdown.
         """
         self.logger.info(f"Channel selected: {channel_type} = {channel_id} for guild {interaction.guild_id}")
+        
+        if session.current_rule is None:
+            self.logger.warning(f"session.current_rule is None, initialising to prevent errors")
+            session.current_rule = {}
+            
         is_valid, message = await channel_selector.validate_channel_access(interaction.guild, channel_id)
 
         if not is_valid:
