@@ -326,6 +326,8 @@ class Forwarding(commands.Cog):
 
         return True
 
+
+
     async def forward_as_native_style(self, formatting: dict, message: discord.Message,
                                       destination: discord.TextChannel):
         """
@@ -347,28 +349,39 @@ class Forwarding(commands.Cog):
             for line in content_lines:
                 quote_lines.append(f"> {line}")
 
-        # Add any attachments/media indicators
-        has_attachments = bool(message.attachments)
-        has_embeds = bool(message.embeds)
-
-        if has_attachments and not message.content:
-            quote_lines.append("> 📎 Attachment")
-        elif has_embeds and not message.content and not message.attachments:
-            quote_lines.append("> 🔗 Embedded content")
-
         # Add the original message link within the quote
-        quote_lines.append(f"> [View Original]({message.jump_url})")
+        quote_lines.append(f"> -# [original post]({message.jump_url})")
 
         # Join all quote lines
         quoted_content = '\n'.join(quote_lines)
 
-        # The key insight: Send ONLY the quoted content as text
+        # Prepare files to forward if attachment forwarding is enabled
+        files_to_send = []
+        if formatting.get("forward_attachments", True) and message.attachments:
+            max_size = formatting.get("max_attachment_size", 25) * 1024 * 1024  # MB to bytes
+            allowed_types = formatting.get("allowed_attachment_types")
+
+            for attachment in message.attachments:
+                try:
+                    if attachment.size > max_size:
+                        continue
+
+                    if allowed_types and not any(attachment.filename.lower().endswith(ext) for ext in allowed_types):
+                        continue
+
+                    f = await attachment.to_file()
+                    files_to_send.append(f)
+                except discord.HTTPException as e:
+                    logger.warning(f"Failed to forward attachment {attachment.filename}: {e}")
+
+        # The key insight: Send the quoted content as text along with the original files
         # Discord will automatically detect URLs in the quoted content and generate fresh embeds
         # This preserves video functionality while maintaining the quoted appearance
         await self._send_with_enhanced_handling(
             destination=destination,
             message=message,
             content=quoted_content,
+            files=files_to_send,
             formatting=formatting
         )
 
