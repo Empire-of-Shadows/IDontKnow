@@ -8,6 +8,7 @@ import json
 from discord.ext import commands
 from discord import app_commands
 
+from logger.logger_setup import get_logger
 from .setup_helpers.state_manager import state_manager
 from .setup_helpers.button_manager import button_manager
 from .setup_helpers.permission_check import permission_checker
@@ -17,6 +18,7 @@ from .setup_helpers.rule_creation_flow import RuleCreationFlow
 from .models.setup_state import SetupState
 from database import guild_manager
 
+logger = get_logger("setup")
 
 class LearnMoreView(discord.ui.View):
     """View for the Learn More section with proper button callbacks"""
@@ -435,6 +437,153 @@ class ForwardCog(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @forward.command(name="delete_rule", description="Delete a forwarding rule")
+    @app_commands.describe(rule_id="The ID of the rule to delete")
+    async def delete_forwarding_rule(self, interaction: discord.Interaction, rule_id: str):
+        """
+        Slash command to delete a forwarding rule by its ID.
+        Only users with manage_guild permission can use this command.
+        """
+        # Check if user has permission to manage the server
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message(
+                "❌ You need the 'Manage Server' permission to delete forwarding rules.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            # Get current guild settings to verify the rule exists
+            guild_settings = await guild_manager.get_guild_settings(str(interaction.guild.id))
+            rules = guild_settings.get("rules", [])
+
+            # Find the rule to delete
+            rule_to_delete = None
+            for rule in rules:
+                if rule.get("rule_id") == rule_id:
+                    rule_to_delete = rule
+                    break
+
+            if not rule_to_delete:
+                await interaction.followup.send(
+                    f"❌ No forwarding rule found with ID: `{rule_id}`",
+                    ephemeral=True
+                )
+                return
+
+            # Delete the rule from the database
+            success = await guild_manager.delete_rule(str(interaction.guild.id), rule_id)
+
+            if success:
+                # Get channel names for the confirmation message
+                source_channel = self.bot.get_channel(int(rule_to_delete.get("source_channel_id")))
+                destination_channel = self.bot.get_channel(int(rule_to_delete.get("destination_channel_id")))
+
+                source_name = source_channel.mention if source_channel else f"<#{rule_to_delete.get('source_channel_id')}>"
+                destination_name = destination_channel.mention if destination_channel else f"<#{rule_to_delete.get('destination_channel_id')}>"
+
+                await interaction.followup.send(
+                    f"✅ **Forwarding rule deleted successfully!**\n"
+                    f"**Rule ID:** `{rule_id}`\n"
+                    f"**Source:** {source_name}\n"
+                    f"**Destination:** {destination_name}",
+                    ephemeral=True
+                )
+
+                logger.info(
+                    f"Forwarding rule {rule_id} deleted in guild {interaction.guild.id} by {interaction.user.id}")
+            else:
+                await interaction.followup.send(
+                    f"❌ Failed to delete forwarding rule `{rule_id}`. Please try again later.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            logger.error(f"Error deleting forwarding rule {rule_id} in guild {interaction.guild.id}: {e}",
+                         exc_info=True)
+            await interaction.followup.send(
+                "❌ An error occurred while deleting the forwarding rule. Please try again later.",
+                ephemeral=True
+            )
+
+    @forward.command(name="list_rules", description="List all forwarding rules for this server")
+    async def list_forwarding_rules(self, interaction: discord.Interaction):
+        """
+        Slash command to list all forwarding rules in the current guild.
+        This helps users identify rule IDs for deletion.
+        """
+        # Check if user has permission to manage the server
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message(
+                "❌ You need the 'Manage Server' permission to view forwarding rules.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            # Get guild settings and rules
+            guild_settings = await guild_manager.get_guild_settings(str(interaction.guild.id))
+            rules = guild_settings.get("rules", [])
+
+            if not rules:
+                await interaction.followup.send(
+                    "📋 **No forwarding rules found for this server.**\n"
+                    "Create your first rule to get started!",
+                    ephemeral=True
+                )
+                return
+
+            # Create an embed to display the rules
+            embed = discord.Embed(
+                title="📋 Forwarding Rules",
+                description=f"Found {len(rules)} forwarding rule(s)",
+                color=discord.Color.blue(),
+                timestamp=discord.utils.utcnow()
+            )
+
+            for i, rule in enumerate(rules[:10], 1):  # Limit to 10 rules to avoid embed limits
+                rule_id = rule.get("rule_id", "Unknown")
+                is_active = "🟢 Active" if rule.get("is_active", False) else "🔴 Inactive"
+
+                source_channel = self.bot.get_channel(int(rule.get("source_channel_id")))
+                destination_channel = self.bot.get_channel(int(rule.get("destination_channel_id")))
+
+                source_name = source_channel.mention if source_channel else f"<#{rule.get('source_channel_id')}>"
+                destination_name = destination_channel.mention if destination_channel else f"<#{rule.get('destination_channel_id')}>"
+
+                embed.add_field(
+                    name=f"Rule #{i} - {is_active}",
+                    value=f"**ID:** `{rule_id}`\n**From:** {source_name}\n**To:** {destination_name}",
+                    inline=True
+                )
+
+            if len(rules) > 10:
+                embed.set_footer(text=f"Showing first 10 of {len(rules)} rules")
+            else:
+                embed.set_footer(text="Use /delete_rule <rule_id> to delete a specific rule")
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error listing forwarding rules in guild {interaction.guild.id}: {e}", exc_info=True)
+            await interaction.followup.send(
+                "❌ An error occurred while retrieving forwarding rules. Please try again later.",
+                ephemeral=True
+            )
+
+    async def cog_unload(self):
+        """
+        Called when the cog is unloaded.
+        This method removes the context menu command from the bot's tree.
+        """
+        self.bot.tree.remove_command(self.ctx_menu.name, type=self.ctx_menu.type)
+
+    # ... existing code ...
 
     async def show_welcome_step(self, interaction: discord.Interaction, session: SetupState):
         """
